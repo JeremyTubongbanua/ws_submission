@@ -16,6 +16,7 @@
 
 - Filter Agent --> 2nd layer of the scraping process, determines whether something should be triaged or not
 - Commenting Agent --> embedded in the chrome extension
+- Triage Manager Subagent --> can be turned off. Automatically manages the triage from start to human review final stage.
 
 ## Overall Flow
 
@@ -32,3 +33,13 @@ scraper that scrapes selective various Reddit conversations, X conversations, Yo
 - 5. Now they are in the "For Review" column where it will be viewable in both the dashboard and in the chrome extension
 - 6. User can click on an element in the "For Review" column and it will bring the browser to the link, where clicking on the comment box will also
 automatically fill it in and give you the option of pressing comment
+
+## Arch Diagram
+
+![](arch_diagram.png)
+
+## Tech Stack
+
+We're gonna use the best vibe coding tech stack out there:
+
+Next.js + Supabase (Supabase Auth) + Tailwind + Vercel + OpenAI
