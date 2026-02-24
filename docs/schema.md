@@ -17,391 +17,16 @@ Plan-aligned behavior:
 - Items can be trashed from `ingested`, `opportunity_review`, or `approval_review`.
 - Triage Manager automation is toggleable through DB config.
 
-## 1) Extensions
-
-```sql
-create extension if not exists "pgcrypto";
-```
-
-## 2) Enums
-
-```sql
-create type public.content_source as enum ('reddit', 'x', 'youtube');
-
-create type public.pipeline_state as enum (
-  'ingested',
-  'opportunity_review',
-  'drafting_queue',
-  'approval_review',
-  'ready_to_publish'
-);
-
-create type public.actor_type as enum ('system', 'agent', 'user');
-
-create type public.action_type as enum (
-  'ingested',
-  'classified',
-  'state_moved',
-  'comment_generated',
-  'comment_regenerated',
-  'approved',
-  'rejected',
-  'posted',
-  'trashed'
-);
-```
-
-## 3) Core Tables
-
-### `defined_lists`
-
-Stores subreddit targets, keyword targets, and source-specific selectors.
-
-```sql
-create table public.defined_lists (
-  id uuid primary key default gen_random_uuid(),
-  list_type text not null check (list_type in ('subreddit', 'keyword', 'account', 'channel')),
-  source public.content_source not null,
-  value text not null,
-  is_active boolean not null default true,
-  notes text,
-  created_by uuid references auth.users(id),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (source, list_type, value)
-);
-```
-
-### `agent_settings`
-
-Feature flags for subagents (including Triage Manager on/off).
-
-```sql
-create table public.agent_settings (
-  id smallint primary key default 1 check (id = 1),
-  triage_manager_enabled boolean not null default false,
-  filter_agent_enabled boolean not null default true,
-  commenting_agent_enabled boolean not null default true,
-  updated_by uuid references auth.users(id),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-```
-
-### `content`
-
-Canonical row for each scraped item.
-
-```sql
-create table public.content (
-  id uuid primary key default gen_random_uuid(),
-  source public.content_source not null,
-  source_content_id text not null,
-  source_url text not null,
-  source_author text,
-  source_created_at timestamptz,
-  title text,
-  body_text text,
-  raw_payload jsonb not null default '{}'::jsonb,
-  scraped_at timestamptz not null default now(),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (source, source_content_id)
-);
-```
-
-### `content_state`
-
-Single current state per content item.
-
-```sql
-create table public.content_state (
-  content_id uuid primary key references public.content(id) on delete cascade,
-  state public.pipeline_state not null default 'ingested',
-  is_trashed boolean not null default false,
-  trashed_at timestamptz,
-  trashed_reason text,
-  trashed_by_user_id uuid references auth.users(id),
-  assigned_to uuid references auth.users(id),
-  priority smallint not null default 3 check (priority between 1 and 5),
-  ai_confidence numeric(5,2),
-  last_transition_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-```
-
-### `generated_comments`
-
-Stores model outputs and revision history.
-
-```sql
-create table public.generated_comments (
-  id uuid primary key default gen_random_uuid(),
-  content_id uuid not null references public.content(id) on delete cascade,
-  draft_text text not null,
-  model_name text not null,
-  model_temperature numeric(3,2),
-  prompt_version text,
-  safety_flags jsonb not null default '{}'::jsonb,
-  is_selected boolean not null default false,
-  generated_by_actor public.actor_type not null default 'agent',
-  generated_by_user_id uuid references auth.users(id),
-  created_at timestamptz not null default now()
-);
-
-create unique index generated_comments_one_selected_per_content_idx
-  on public.generated_comments (content_id)
-  where is_selected = true;
-```
-
-### `transactions`
-
-Audit log for every action and state transition.
-
-```sql
-create table public.transactions (
-  id bigserial primary key,
-  content_id uuid not null references public.content(id) on delete cascade,
-  action public.action_type not null,
-  from_state public.pipeline_state,
-  to_state public.pipeline_state,
-  actor public.actor_type not null,
-  actor_user_id uuid references auth.users(id),
-  actor_label text,
-  details jsonb not null default '{}'::jsonb,
-  created_at timestamptz not null default now(),
-  check (
-    (action = 'state_moved' and from_state is not null and to_state is not null)
-    or (action <> 'state_moved')
-  )
-);
-```
-
-### `posting_events`
-
-Track extension-side post attempts and outcomes.
-
-```sql
-create table public.posting_events (
-  id uuid primary key default gen_random_uuid(),
-  content_id uuid not null references public.content(id) on delete cascade,
-  generated_comment_id uuid references public.generated_comments(id) on delete set null,
-  status text not null check (status in ('opened', 'autofilled', 'submitted', 'failed')),
-  error_message text,
-  created_by uuid references auth.users(id),
-  created_at timestamptz not null default now()
-);
-```
-
-## 4) Indexes
-
-```sql
-create index content_source_created_idx
-  on public.content (source, source_created_at desc);
-
-create index content_state_state_priority_idx
-  on public.content_state (state, priority, last_transition_at asc);
-
-create index transactions_content_created_idx
-  on public.transactions (content_id, created_at desc);
-
-create index transactions_action_created_idx
-  on public.transactions (action, created_at desc);
-```
-
-## 5) Updated-At Trigger
-
-```sql
-create or replace function public.set_updated_at()
-returns trigger
-language plpgsql
-as $$
-begin
-  new.updated_at = now();
-  return new;
-end;
-$$;
-
-create trigger set_defined_lists_updated_at
-before update on public.defined_lists
-for each row execute function public.set_updated_at();
-
-create trigger set_agent_settings_updated_at
-before update on public.agent_settings
-for each row execute function public.set_updated_at();
-
-create trigger set_content_updated_at
-before update on public.content
-for each row execute function public.set_updated_at();
-
-create trigger set_content_state_updated_at
-before update on public.content_state
-for each row execute function public.set_updated_at();
-```
-
-## 6) Transition Function (recommended)
-
-Use one DB function so all moves are validated and logged in `transactions`.
-
-```sql
-create or replace function public.move_content_state(
-  p_content_id uuid,
-  p_to_state public.pipeline_state,
-  p_actor public.actor_type,
-  p_actor_user_id uuid default null,
-  p_actor_label text default null,
-  p_details jsonb default '{}'::jsonb
-)
-returns void
-language plpgsql
-security definer
-as $$
-declare
-  v_from_state public.pipeline_state;
-begin
-  select state into v_from_state
-  from public.content_state
-  where content_id = p_content_id
-  for update;
-
-  if not found then
-    raise exception 'content_state row missing for content_id %', p_content_id;
-  end if;
-
-  if v_from_state = p_to_state then
-    return;
-  end if;
-
-  -- Guardrail: ready_to_publish should only come from approval_review
-  if p_to_state = 'ready_to_publish' and v_from_state <> 'approval_review' then
-    raise exception 'invalid transition % -> %', v_from_state, p_to_state;
-  end if;
-
-  update public.content_state
-  set state = p_to_state,
-      last_transition_at = now()
-  where content_id = p_content_id;
-
-  insert into public.transactions (
-    content_id, action, from_state, to_state, actor, actor_user_id, actor_label, details
-  ) values (
-    p_content_id, 'state_moved', v_from_state, p_to_state, p_actor, p_actor_user_id, p_actor_label, p_details
-  );
-end;
-$$;
-```
-
-### `trash_content` helper (recommended)
-
-Trash a record without adding a sixth pipeline state; keeps your five state names intact.
-
-```sql
-create or replace function public.trash_content(
-  p_content_id uuid,
-  p_actor public.actor_type,
-  p_actor_user_id uuid default null,
-  p_actor_label text default null,
-  p_reason text default null
-)
-returns void
-language plpgsql
-security definer
-as $$
-declare
-  v_from_state public.pipeline_state;
-begin
-  select state into v_from_state
-  from public.content_state
-  where content_id = p_content_id
-  for update;
-
-  if not found then
-    raise exception 'content_state row missing for content_id %', p_content_id;
-  end if;
-
-  update public.content_state
-  set is_trashed = true,
-      trashed_at = now(),
-      trashed_reason = p_reason,
-      trashed_by_user_id = p_actor_user_id,
-      last_transition_at = now()
-  where content_id = p_content_id;
-
-  insert into public.transactions (
-    content_id, action, from_state, to_state, actor, actor_user_id, actor_label, details
-  ) values (
-    p_content_id, 'trashed', v_from_state, null, p_actor, p_actor_user_id, p_actor_label,
-    jsonb_build_object('reason', p_reason)
-  );
-end;
-$$;
-```
-
-## 7) Security (MVP)
-
-For MVP speed, keep RLS off until auth boundaries are finalized.
-
-```sql
-alter table public.defined_lists disable row level security;
-alter table public.agent_settings disable row level security;
-alter table public.content disable row level security;
-alter table public.content_state disable row level security;
-alter table public.generated_comments disable row level security;
-alter table public.transactions disable row level security;
-alter table public.posting_events disable row level security;
-```
-
-## 8) Stage Silos (Plan Alignment)
-
-To match the plan's stage silos while keeping normalized storage, this schema uses stage-specific views:
-
-```sql
-create view public.v_ingested as
-select c.*, cs.*
-from public.content c
-join public.content_state cs on cs.content_id = c.id
-where cs.state = 'ingested' and cs.is_trashed = false;
-
-create view public.v_opportunity_review as
-select c.*, cs.*
-from public.content c
-join public.content_state cs on cs.content_id = c.id
-where cs.state = 'opportunity_review' and cs.is_trashed = false;
-
-create view public.v_drafting_queue as
-select c.*, cs.*
-from public.content c
-join public.content_state cs on cs.content_id = c.id
-where cs.state = 'drafting_queue' and cs.is_trashed = false;
-
-create view public.v_approval_review as
-select c.*, cs.*
-from public.content c
-join public.content_state cs on cs.content_id = c.id
-where cs.state = 'approval_review' and cs.is_trashed = false;
-
-create view public.v_ready_to_publish as
-select c.*, cs.*
-from public.content c
-join public.content_state cs on cs.content_id = c.id
-where cs.state = 'ready_to_publish' and cs.is_trashed = false;
-
-create view public.v_trashed as
-select c.*, cs.*
-from public.content c
-join public.content_state cs on cs.content_id = c.id
-where cs.is_trashed = true;
-```
-
-## 9) Minimal Insert Flow
+## Minimal Insert Flow
 
 1. Scraper inserts into `content`.
 2. Scraper inserts matching row into `content_state` with `ingested`.
-3. Filter agent/human calls `move_content_state(...)`.
-4. Commenting agent inserts draft(s) into `generated_comments`.
-5. Human marks one draft as `is_selected = true`, then move to `ready_to_publish`.
-6. Extension records `posting_events` and final `posted` transaction.
-7. If rejected at review checkpoints, call `trash_content(...)`.
+3. Scraper triage/classification writes a `transactions` row with `action = 'classified'`.
+4. Filter agent/human calls `move_content_state(...)`.
+5. Commenting agent inserts draft(s) into `generated_comments`.
+6. Human marks one draft as `is_selected = true`, then move to `ready_to_publish`.
+7. Extension records `posting_events` and final `posted` transaction.
+8. If rejected at review checkpoints, call `trash_content(...)`.
 
 ## SQL Editor Paste
 
@@ -508,11 +133,60 @@ create table public.posting_events (
   id uuid primary key default gen_random_uuid(),
   content_id uuid not null references public.content(id) on delete cascade,
   generated_comment_id uuid references public.generated_comments(id) on delete set null,
-  status text not null check (status in ('opened', 'autofilled', 'submitted', 'failed')),
+  status text not null check (status in ('opened', 'autofilled', 'submitted', 'failed', 'deleted')),
   error_message text,
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now()
 );
+
+create unique index generated_comments_one_selected_per_content_idx
+  on public.generated_comments (content_id)
+  where is_selected = true;
+
+create index content_state_state_priority_idx
+  on public.content_state (state, priority, last_transition_at asc);
+
+create index transactions_content_created_idx
+  on public.transactions (content_id, created_at desc);
+
+create index transactions_action_created_idx
+  on public.transactions (action, created_at desc);
+
+create view public.v_ingested as
+select c.*, cs.*
+from public.content c
+join public.content_state cs on cs.content_id = c.id
+where cs.state = 'ingested' and cs.is_trashed = false;
+
+create view public.v_opportunity_review as
+select c.*, cs.*
+from public.content c
+join public.content_state cs on cs.content_id = c.id
+where cs.state = 'opportunity_review' and cs.is_trashed = false;
+
+create view public.v_drafting_queue as
+select c.*, cs.*
+from public.content c
+join public.content_state cs on cs.content_id = c.id
+where cs.state = 'drafting_queue' and cs.is_trashed = false;
+
+create view public.v_approval_review as
+select c.*, cs.*
+from public.content c
+join public.content_state cs on cs.content_id = c.id
+where cs.state = 'approval_review' and cs.is_trashed = false;
+
+create view public.v_ready_to_publish as
+select c.*, cs.*
+from public.content c
+join public.content_state cs on cs.content_id = c.id
+where cs.state = 'ready_to_publish' and cs.is_trashed = false;
+
+create view public.v_trashed as
+select c.*, cs.*
+from public.content c
+join public.content_state cs on cs.content_id = c.id
+where cs.is_trashed = true;
 
 -- alter table public.defined_lists disable row level security;
 -- alter table public.content disable row level security;
@@ -521,4 +195,173 @@ create table public.posting_events (
 -- alter table public.transactions disable row level security;
 -- alter table public.posting_events disable row level security;
 
-commit;```
+commit;
+```
+
+## SQL Delete All Data But Not Tables
+
+Run this to remove all rows while keeping your tables, indexes, and constraints.
+
+```sql
+begin;
+
+truncate table public.posting_events restart identity cascade;
+truncate table public.transactions restart identity cascade;
+truncate table public.generated_comments restart identity cascade;
+truncate table public.content_state restart identity cascade;
+truncate table public.content restart identity cascade;
+truncate table public.defined_lists restart identity cascade;
+
+commit;
+```
+
+## SQL Editor Seed Data (Fake Rows)
+
+Run this after the SQL Editor Paste block if you want test data in every table.
+
+```sql
+begin;
+
+with seeded_content as (
+  insert into public.content (
+    source,
+    source_content_id,
+    source_url,
+    source_author,
+    source_created_at,
+    title,
+    body_text,
+    raw_payload
+  )
+  values
+    (
+      'reddit',
+      't3_demo_001',
+      'https://reddit.com/r/saas/comments/demo_001',
+      'founder_alpha',
+      now() - interval '2 hours',
+      'Launching a new workflow tool for agencies',
+      'We are validating demand and looking for early users.',
+      '{"subreddit":"saas","score":112}'::jsonb
+    ),
+    (
+      'x',
+      'tweet_demo_001',
+      'https://x.com/example/status/1000000000000000001',
+      'builder_beta',
+      now() - interval '90 minutes',
+      'Need better approval workflows',
+      'Current approval process is too slow for content teams.',
+      '{"retweets":7,"likes":54}'::jsonb
+    )
+  returning id
+),
+seeded_state as (
+  insert into public.content_state (
+    content_id,
+    state,
+    is_trashed,
+    priority,
+    ai_confidence
+  )
+  select
+    id,
+    case
+      when row_number() over (order by id) = 1 then 'opportunity_review'
+      else 'drafting_queue'
+    end,
+    false,
+    case
+      when row_number() over (order by id) = 1 then 2
+      else 3
+    end,
+    case
+      when row_number() over (order by id) = 1 then 91.25
+      else 84.10
+    end
+  from seeded_content
+  returning content_id, state
+),
+seeded_comments as (
+  insert into public.generated_comments (
+    content_id,
+    draft_text,
+    model_name,
+    model_temperature,
+    prompt_version,
+    safety_flags,
+    is_selected,
+    generated_by_actor
+  )
+  select
+    id,
+    case
+      when row_number() over (order by id) = 1
+        then 'This launch is interesting. What user segment has the strongest pull so far?'
+      else 'Approval friction is common. Where does your team lose the most time today?'
+    end,
+    'gpt-5-mini',
+    0.40,
+    'v1.0',
+    '{"toxicity":false,"pii":false}'::jsonb,
+    true,
+    'agent'
+  from seeded_content
+  returning id, content_id
+),
+seeded_transactions as (
+  insert into public.transactions (
+    content_id,
+    action,
+    from_state,
+    to_state,
+    actor,
+    actor_label,
+    details
+  )
+  select
+    ss.content_id,
+    'classified',
+    null,
+    null,
+    'system',
+    'scraper-triage',
+    jsonb_build_object('triage_bucket', ss.state, 'note', 'fake seeded triage')
+  from seeded_state ss
+
+  union all
+
+  select
+    ss.content_id,
+    'state_moved',
+    'ingested',
+    ss.state,
+    'system',
+    'seed-script',
+    jsonb_build_object('note', 'fake seeded transition')
+  from seeded_state ss
+)
+insert into public.posting_events (
+  content_id,
+  generated_comment_id,
+  status,
+  error_message
+)
+select
+  sc.content_id,
+  sc.id,
+  case
+    when row_number() over (order by sc.content_id) = 1 then 'autofilled'
+    else 'deleted'
+  end,
+  null
+from seeded_comments sc;
+
+insert into public.defined_lists (list_type, source, value, is_active, notes)
+values
+  ('subreddit', 'reddit', 'saas', true, 'seed list'),
+  ('keyword', 'x', 'approval workflow', true, 'seed keyword'),
+  ('channel', 'youtube', 'UC123456789demo', false, 'seed channel');
+
+commit;
+```
