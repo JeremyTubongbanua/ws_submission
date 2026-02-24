@@ -111,8 +111,67 @@ def _read_state_or_404(content_id: str) -> dict[str, Any]:
 
 
 def _queue_response(relation: str, *, limit: int, offset: int) -> dict[str, Any]:
-    items = client.list_rows(relation, limit=limit, offset=offset)
-    return {"items": items, "limit": limit, "offset": offset, "count": len(items)}
+    try:
+        items = client.list_rows(relation, limit=limit, offset=offset)
+        return {"items": items, "limit": limit, "offset": offset, "count": len(items)}
+    except SupabaseAPIError as exc:
+        # If SQL views are not present in Supabase schema cache yet, use join fallback.
+        if "PGRST205" in exc.body and relation in {
+            "v_ingested",
+            "v_opportunity_review",
+            "v_drafting_queue",
+            "v_approval_review",
+            "v_ready_to_publish",
+            "v_trashed",
+        }:
+            items = _queue_fallback(relation=relation, limit=limit, offset=offset)
+            return {"items": items, "limit": limit, "offset": offset, "count": len(items)}
+        raise
+
+
+def _queue_fallback(*, relation: str, limit: int, offset: int) -> list[dict[str, Any]]:
+    if relation == "v_trashed":
+        state_filters = {"is_trashed": "eq.true"}
+    else:
+        state_by_relation = {
+            "v_ingested": "ingested",
+            "v_opportunity_review": "opportunity_review",
+            "v_drafting_queue": "drafting_queue",
+            "v_approval_review": "approval_review",
+            "v_ready_to_publish": "ready_to_publish",
+        }
+        state = state_by_relation.get(relation)
+        if not state:
+            return []
+        state_filters = {"state": f"eq.{state}", "is_trashed": "eq.false"}
+
+    state_rows = client.list_rows(
+        "content_state",
+        limit=limit,
+        offset=offset,
+        filters=state_filters,
+    )
+    if not state_rows:
+        return []
+
+    content_ids = [row["content_id"] for row in state_rows if row.get("content_id")]
+    if not content_ids:
+        return []
+    in_values = ",".join(content_ids)
+    content_rows = client.list_rows(
+        "content",
+        limit=max(limit, len(content_ids)),
+        offset=0,
+        filters={"id": f"in.({in_values})"},
+    )
+    content_by_id = {row["id"]: row for row in content_rows if row.get("id")}
+
+    merged: list[dict[str, Any]] = []
+    for state_row in state_rows:
+        cid = state_row.get("content_id")
+        content_row = content_by_id.get(cid, {})
+        merged.append({**content_row, **state_row})
+    return merged
 
 
 @app.exception_handler(SupabaseAPIError)

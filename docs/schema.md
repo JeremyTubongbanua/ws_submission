@@ -239,50 +239,134 @@ with seeded_content as (
       't3_demo_001',
       'https://reddit.com/r/saas/comments/demo_001',
       'founder_alpha',
-      now() - interval '2 hours',
+      now() - interval '8 hours',
       'Launching a new workflow tool for agencies',
       'We are validating demand and looking for early users.',
       '{"subreddit":"saas","score":112}'::jsonb
     ),
     (
       'x',
-      'tweet_demo_001',
-      'https://x.com/example/status/1000000000000000001',
+      'tweet_demo_002',
+      'https://x.com/example/status/1000000000000000002',
       'builder_beta',
-      now() - interval '90 minutes',
+      now() - interval '7 hours',
       'Need better approval workflows',
       'Current approval process is too slow for content teams.',
       '{"retweets":7,"likes":54}'::jsonb
+    ),
+    (
+      'youtube',
+      'yt_demo_003',
+      'https://youtube.com/watch?v=demo003',
+      'pm_gamma',
+      now() - interval '6 hours',
+      'Commenting on B2B onboarding benchmarks',
+      'Curious how teams structure first-week activation.',
+      '{"channel":"UC123456789demo","likes":18}'::jsonb
+    ),
+    (
+      'reddit',
+      't3_demo_004',
+      'https://reddit.com/r/startups/comments/demo_004',
+      'ops_delta',
+      now() - interval '5 hours',
+      'How are teams handling churn analysis?',
+      'Looking for practical methods for early-stage churn diagnostics.',
+      '{"subreddit":"startups","score":49}'::jsonb
+    ),
+    (
+      'x',
+      'tweet_demo_005',
+      'https://x.com/example/status/1000000000000000005',
+      'growth_epsilon',
+      now() - interval '4 hours',
+      'Struggling with outbound personalization',
+      'Need a repeatable strategy for segmented outreach.',
+      '{"retweets":11,"likes":73}'::jsonb
+    ),
+    (
+      'reddit',
+      't3_demo_006',
+      'https://reddit.com/r/marketing/comments/demo_006',
+      'cmo_zeta',
+      now() - interval '3 hours',
+      'Attribution debate in multi-touch funnels',
+      'Team split between first-touch and weighted attribution.',
+      '{"subreddit":"marketing","score":87}'::jsonb
+    ),
+    (
+      'youtube',
+      'yt_demo_007',
+      'https://youtube.com/watch?v=demo007',
+      'founder_eta',
+      now() - interval '2 hours',
+      'Launch review: community-led growth',
+      'Posting our launch retrospective and what worked.',
+      '{"channel":"UC123456789demo","likes":124}'::jsonb
+    ),
+    (
+      'x',
+      'tweet_demo_008',
+      'https://x.com/example/status/1000000000000000008',
+      'revops_theta',
+      now() - interval '70 minutes',
+      'Need templates for customer handoff',
+      'Sales to CS handoff is inconsistent and error-prone.',
+      '{"retweets":4,"likes":29}'::jsonb
+    ),
+    (
+      'reddit',
+      't3_demo_009',
+      'https://reddit.com/r/entrepreneur/comments/demo_009',
+      'solo_iota',
+      now() - interval '50 minutes',
+      'Solo founder asks for pricing feedback',
+      'Unsure whether to launch usage-based or tiered plans.',
+      '{"subreddit":"entrepreneur","score":22}'::jsonb
     )
-  returning id
+  returning id, source_content_id, source
 ),
 seeded_state as (
   insert into public.content_state (
     content_id,
     state,
     is_trashed,
+    trashed_at,
+    trashed_reason,
     priority,
     ai_confidence
   )
   select
     id,
     case
-      when row_number() over (order by id) = 1 then 'opportunity_review'
-      else 'drafting_queue'
+      when source_content_id = 't3_demo_001' then 'ingested'
+      when source_content_id in ('tweet_demo_002', 'yt_demo_003') then 'opportunity_review'
+      when source_content_id in ('t3_demo_004', 'tweet_demo_005') then 'drafting_queue'
+      when source_content_id = 't3_demo_006' then 'approval_review'
+      when source_content_id in ('yt_demo_007', 'tweet_demo_008') then 'ready_to_publish'
+      else 'ingested'
     end,
-    false,
+    case when source_content_id = 't3_demo_009' then true else false end,
+    case when source_content_id = 't3_demo_009' then now() - interval '20 minutes' else null end,
+    case when source_content_id = 't3_demo_009' then 'low_relevance_seed_example' else null end,
     case
-      when row_number() over (order by id) = 1 then 2
-      else 3
+      when source_content_id in ('yt_demo_007', 'tweet_demo_008') then 1
+      when source_content_id = 't3_demo_006' then 2
+      when source_content_id in ('t3_demo_004', 'tweet_demo_005') then 3
+      else 4
     end,
     case
-      when row_number() over (order by id) = 1 then 91.25
-      else 84.10
+      when source_content_id = 'yt_demo_007' then 95.40
+      when source_content_id = 'tweet_demo_008' then 92.10
+      when source_content_id = 't3_demo_006' then 89.75
+      when source_content_id in ('t3_demo_004', 'tweet_demo_005') then 84.20
+      when source_content_id in ('tweet_demo_002', 'yt_demo_003') then 77.80
+      else 62.50
     end
   from seeded_content
-  returning content_id, state
+  returning content_id, state, is_trashed
 ),
-seeded_comments as (
+seeded_comments_selected as (
   insert into public.generated_comments (
     content_id,
     draft_text,
@@ -294,19 +378,54 @@ seeded_comments as (
     generated_by_actor
   )
   select
-    id,
+    sc.id,
     case
-      when row_number() over (order by id) = 1
-        then 'This launch is interesting. What user segment has the strongest pull so far?'
-      else 'Approval friction is common. Where does your team lose the most time today?'
+      when sc.source_content_id = 't3_demo_004'
+        then 'Your churn-analysis question is timely. Which segment shows the steepest drop first?'
+      when sc.source_content_id = 'tweet_demo_005'
+        then 'For outreach, what variable are you personalizing first: role, trigger, or problem?'
+      when sc.source_content_id = 't3_demo_006'
+        then 'Attribution arguments usually hide goal mismatch. What decision is this model meant to drive?'
+      when sc.source_content_id = 'yt_demo_007'
+        then 'Great launch recap. Which channel produced the highest-intent replies post-launch?'
+      else 'Clean handoff templates start with ownership clarity. Which field is most often missing?'
     end,
     'gpt-5-mini',
     0.40,
-    'v1.0',
+    'v1.1',
     '{"toxicity":false,"pii":false}'::jsonb,
     true,
     'agent'
-  from seeded_content
+  from seeded_content sc
+  where sc.source_content_id in ('t3_demo_004', 'tweet_demo_005', 't3_demo_006', 'yt_demo_007', 'tweet_demo_008')
+  returning id, content_id
+),
+seeded_comments_alternates as (
+  insert into public.generated_comments (
+    content_id,
+    draft_text,
+    model_name,
+    model_temperature,
+    prompt_version,
+    safety_flags,
+    is_selected,
+    generated_by_actor
+  )
+  select
+    sc.id,
+    case
+      when sc.source_content_id = 't3_demo_004'
+        then 'Interesting topic. What data source do you trust most for churn signals right now?'
+      else 'Handoff quality is usually process + tooling. Which one breaks first for your team?'
+    end,
+    'gpt-5-mini',
+    0.65,
+    'v1.1-alt',
+    '{"toxicity":false,"pii":false}'::jsonb,
+    false,
+    'agent'
+  from seeded_content sc
+  where sc.source_content_id in ('t3_demo_004', 'tweet_demo_008')
   returning id, content_id
 ),
 seeded_transactions as (
@@ -320,14 +439,28 @@ seeded_transactions as (
     details
   )
   select
+    sc.id,
+    'ingested',
+    null,
+    null,
+    'system',
+    'scraper-daemon',
+    jsonb_build_object('source', sc.source, 'seed', true)
+  from seeded_content sc
+
+  union all
+
+  select
     ss.content_id,
     'classified',
     null,
     null,
-    'system',
-    'scraper-triage',
-    jsonb_build_object('triage_bucket', ss.state, 'note', 'fake seeded triage')
+    'agent',
+    'scraper-subagent',
+    jsonb_build_object('triage_bucket', ss.state, 'seed', true)
   from seeded_state ss
+  where ss.state in ('opportunity_review', 'drafting_queue', 'approval_review', 'ready_to_publish')
+    and ss.is_trashed = false
 
   union all
 
@@ -337,31 +470,112 @@ seeded_transactions as (
     'ingested',
     ss.state,
     'system',
-    'seed-script',
-    jsonb_build_object('note', 'fake seeded transition')
+    'pipeline-automation',
+    jsonb_build_object('note', 'fake seeded transition', 'seed', true)
   from seeded_state ss
-)
-insert into public.posting_events (
-  content_id,
-  generated_comment_id,
-  status,
-  error_message
+  where ss.state <> 'ingested'
+    and ss.is_trashed = false
+
+  union all
+
+  select
+    scs.content_id,
+    'comment_generated',
+    null,
+    null,
+    'agent',
+    'comment-subagent',
+    jsonb_build_object('model', 'gpt-5-mini', 'seed', true)
+  from seeded_comments_selected scs
+
+  union all
+
+  select
+    ss.content_id,
+    'trashed',
+    'ingested',
+    null,
+    'agent',
+    'scraper-subagent',
+    jsonb_build_object('reason', 'low_relevance_seed_example', 'seed', true)
+  from seeded_state ss
+  where ss.is_trashed = true
+
+  union all
+
+  select
+    scs.content_id,
+    'posted',
+    null,
+    null,
+    'user',
+    'chrome-extension',
+    jsonb_build_object('status', 'submitted', 'seed', true)
+  from seeded_comments_selected scs
+  join seeded_content sc on sc.id = scs.content_id
+  where sc.source_content_id = 'yt_demo_007'
+
+  returning 1
+),
+seeded_posting_events as (
+  insert into public.posting_events (
+    content_id,
+    generated_comment_id,
+    status,
+    error_message
+  )
+  select
+    scs.content_id,
+    scs.id,
+    case
+      when sc.source_content_id = 'yt_demo_007' then 'submitted'
+      when sc.source_content_id = 'tweet_demo_008' then 'deleted'
+      else 'autofilled'
+    end,
+    case
+      when sc.source_content_id = 'tweet_demo_008' then 'user_deleted_before_submit'
+      else null
+    end
+  from seeded_comments_selected scs
+  join seeded_content sc on sc.id = scs.content_id
+  where sc.source_content_id in ('yt_demo_007', 'tweet_demo_008')
+  returning id
+),
+seeded_posting_events_opened as (
+  insert into public.posting_events (
+    content_id,
+    generated_comment_id,
+    status,
+    error_message
+  )
+  select
+    scs.content_id,
+    scs.id,
+    'opened',
+    null
+  from seeded_comments_selected scs
+  join seeded_content sc on sc.id = scs.content_id
+  where sc.source_content_id = 't3_demo_006'
+  returning id
+),
+seeded_defined_lists as (
+  insert into public.defined_lists (list_type, source, value, is_active, notes)
+  values
+    ('subreddit', 'reddit', 'saas', true, 'seed list'),
+    ('keyword', 'x', 'approval workflow', true, 'seed keyword'),
+    ('subreddit', 'reddit', 'startups', true, 'seed list'),
+    ('keyword', 'reddit', 'churn', true, 'seed keyword'),
+    ('account', 'x', '@workflowstudio', true, 'seed account'),
+    ('channel', 'youtube', 'UC123456789demo', true, 'seed channel'),
+    ('channel', 'youtube', 'UC987654321demo', false, 'inactive seed channel')
+  returning 1
 )
 select
-  sc.content_id,
-  sc.id,
-  case
-    when row_number() over (order by sc.content_id) = 1 then 'autofilled'
-    else 'deleted'
-  end,
-  null
-from seeded_comments sc;
-
-insert into public.defined_lists (list_type, source, value, is_active, notes)
-values
-  ('subreddit', 'reddit', 'saas', true, 'seed list'),
-  ('keyword', 'x', 'approval workflow', true, 'seed keyword'),
-  ('channel', 'youtube', 'UC123456789demo', false, 'seed channel');
+  (select count(*) from seeded_transactions) as tx_count,
+  (select count(*) from seeded_comments_alternates) as alt_comment_count,
+  (select count(*) from seeded_posting_events) as posting_event_count,
+  (select count(*) from seeded_posting_events_opened) as opened_event_count,
+  (select count(*) from seeded_defined_lists) as defined_list_count;
 
 commit;
 ```

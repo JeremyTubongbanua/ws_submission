@@ -1,2 +1,5 @@
 .env
 __pycache__/
+.next
+node_modules/
+*.egg-info
