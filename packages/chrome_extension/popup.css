@@ -1,0 +1,171 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f3efe4;
+  color: #1b1f1e;
+}
+
+.shell {
+  width: 360px;
+  padding: 16px;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.subhead {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #44514d;
+}
+
+.preset-banner {
+  margin: 0 0 12px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #0d4d46;
+  background: #dff2eb;
+}
+
+.preset-list-shell {
+  margin: 0 0 14px;
+  border: 1px solid #d5dfdb;
+  border-radius: 14px;
+  background: #fffdf7;
+  overflow: hidden;
+}
+
+.preset-list-header {
+  padding: 12px 12px 10px;
+  border-bottom: 1px solid #e8eeea;
+  background: #f7f3e8;
+}
+
+.preset-list-header h2 {
+  margin: 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.preset-list-header p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #5b6763;
+}
+
+.preset-list {
+  max-height: 220px;
+  overflow: auto;
+}
+
+.preset-card {
+  padding: 12px;
+  border-top: 1px solid #eef2ef;
+}
+
+.preset-card:first-child {
+  border-top: 0;
+}
+
+.preset-card.is-active {
+  background: #edf8f4;
+}
+
+.preset-name {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.preset-chip {
+  display: inline-block;
+  margin-bottom: 8px;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0d6d62;
+  background: #dff2eb;
+}
+
+.preset-link {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #0d5c88;
+  text-decoration: none;
+  word-break: break-word;
+}
+
+.preset-link:hover {
+  text-decoration: underline;
+}
+
+.preset-comment {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #394541;
+  white-space: pre-wrap;
+}
+
+.field {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+textarea {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #b9c4bf;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  background: #fffdf7;
+}
+
+button {
+  width: 100%;
+  margin-top: 12px;
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font: inherit;
+  font-weight: 700;
+  color: white;
+  background: #0d6d62;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #095249;
+}
+
+button.secondary {
+  color: #0d6d62;
+  background: #e2efe9;
+}
+
+button.secondary:hover {
+  background: #d1e6de;
+}
+
+.status {
+  min-height: 18px;
+  margin: 10px 2px 0;
+  font-size: 12px;
+  color: #44514d;
+}

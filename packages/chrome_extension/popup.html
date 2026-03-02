@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WS Comment Filler</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <h1>Comment Filler</h1>
+      <p class="subhead">Paste comment text, then fill the active comment box on the current tab.</p>
+      <p id="presetBanner" class="preset-banner" hidden></p>
+      <section class="preset-list-shell" aria-labelledby="presetListHeading">
+        <div class="preset-list-header">
+          <h2 id="presetListHeading">URL Presets</h2>
+          <p>These links will auto-fill with their assigned comment.</p>
+        </div>
+        <div id="presetList" class="preset-list"></div>
+      </section>
+      <label class="field" for="commentText">Comment text</label>
+      <textarea id="commentText" rows="8" placeholder="Write or paste the comment here"></textarea>
+      <button id="saveButton" type="button" class="secondary">Save Draft For Auto-Fill</button>
+      <button id="fillButton" type="button">Fill Comment Box</button>
+      <p id="status" class="status" aria-live="polite"></p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
