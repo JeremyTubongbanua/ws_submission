@@ -24,6 +24,7 @@ The popup shows:
 - A list of URL presets
 - The exact comment text each preset will use
 - Whether the current tab matches one of those presets
+- A live ready-to-publish queue loader from `https://api.thecopilotmarketer.ca`
 
 ## Files
 
@@ -43,6 +44,19 @@ The popup shows:
 After installation, the extension should appear in the Chrome toolbar. If not, open the extensions menu and pin it.
 
 ## How to use it
+
+### Connect to the production DB API
+
+1. Click the extension icon.
+2. Paste the DB API key into the `DB API key` field.
+3. Click `Save API Key`.
+4. Click `Load Ready Queue`.
+
+The popup will call:
+
+- `https://api.thecopilotmarketer.ca/v1/queues/ready-to-publish`
+
+and render the returned ready-to-publish items.
 
 ### Save a general draft comment
 

@@ -1,11 +1,17 @@
 const commentInput = document.getElementById('commentText');
+const apiKeyInput = document.getElementById('apiKey');
+const saveApiKeyButton = document.getElementById('saveApiKeyButton');
+const loadQueueButton = document.getElementById('loadQueueButton');
+const queueList = document.getElementById('queueList');
 const saveButton = document.getElementById('saveButton');
 const fillButton = document.getElementById('fillButton');
 const statusNode = document.getElementById('status');
 const presetBanner = document.getElementById('presetBanner');
 const presetList = document.getElementById('presetList');
 const STORAGE_KEY = 'wsDraftComment';
+const API_KEY_STORAGE = 'wsDbApiKey';
 const PRESETS_PATH = 'presets.json';
+const API_BASE_URL = 'https://api.thecopilotmarketer.ca';
 
 async function loadPresets() {
   const url = chrome.runtime.getURL(PRESETS_PATH);
@@ -36,6 +42,13 @@ async function loadSavedDraft() {
   const saved = await chrome.storage.local.get(STORAGE_KEY);
   if (typeof saved[STORAGE_KEY] === 'string' && saved[STORAGE_KEY]) {
     commentInput.value = saved[STORAGE_KEY];
+  }
+}
+
+async function loadSavedApiKey() {
+  const saved = await chrome.storage.local.get(API_KEY_STORAGE);
+  if (typeof saved[API_KEY_STORAGE] === 'string') {
+    apiKeyInput.value = saved[API_KEY_STORAGE];
   }
 }
 
@@ -115,6 +128,75 @@ async function saveDraft() {
   setStatus(text ? 'Draft saved for auto-fill.' : 'Saved empty draft. Auto-fill disabled until text is added.');
 }
 
+async function saveApiKey() {
+  const apiKey = apiKeyInput.value.trim();
+  await chrome.storage.local.set({ [API_KEY_STORAGE]: apiKey });
+  setStatus(apiKey ? 'API key saved.' : 'Saved empty API key.', !apiKey);
+}
+
+function renderQueue(items) {
+  if (!queueList) return;
+  if (!Array.isArray(items) || items.length === 0) {
+    queueList.innerHTML = '<div class="queue-card"><p class="queue-meta">No ready-to-publish items found.</p></div>';
+    return;
+  }
+
+  queueList.innerHTML = '';
+  for (const item of items) {
+    const card = document.createElement('article');
+    card.className = 'queue-card';
+
+    const title = document.createElement('p');
+    title.className = 'queue-title';
+    title.textContent = item.title || item.source_url || item.id || 'Untitled item';
+    card.appendChild(title);
+
+    const meta = document.createElement('p');
+    meta.className = 'queue-meta';
+    meta.textContent = [item.source, item.source_author, item.source_url].filter(Boolean).join(' • ');
+    card.appendChild(meta);
+
+    const useButton = document.createElement('button');
+    useButton.type = 'button';
+    useButton.textContent = 'Use Source URL';
+    useButton.addEventListener('click', () => {
+      if (typeof item.source_url === 'string') {
+        commentInput.value = commentInput.value || '';
+        window.open(item.source_url, '_blank', 'noopener,noreferrer');
+      }
+    });
+    card.appendChild(useButton);
+
+    queueList.appendChild(card);
+  }
+}
+
+async function loadReadyQueue() {
+  const apiKey = apiKeyInput.value.trim();
+  if (!apiKey) {
+    setStatus('Save the DB API key first.', true);
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/v1/queues/ready-to-publish?limit=10&offset=0`, {
+      headers: {
+        'X-API-Key': apiKey,
+      },
+      cache: 'no-store',
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.detail || `Failed (${response.status})`);
+    }
+    renderQueue(payload.items || []);
+    setStatus('Loaded ready-to-publish queue.');
+  } catch (error) {
+    renderQueue([]);
+    setStatus(error instanceof Error ? error.message : 'Failed to load queue.', true);
+  }
+}
+
 async function getActiveTab() {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   return tabs[0];
@@ -153,6 +235,7 @@ async function fillCommentBox() {
 async function initializePopup() {
   try {
     await loadSavedDraft();
+    await loadSavedApiKey();
     const tab = await getActiveTab();
     const presets = await loadPresets();
     renderPresetList(presets, tab?.url);
@@ -168,6 +251,14 @@ fillButton.addEventListener('click', () => {
 
 saveButton.addEventListener('click', () => {
   void saveDraft();
+});
+
+saveApiKeyButton.addEventListener('click', () => {
+  void saveApiKey();
+});
+
+loadQueueButton.addEventListener('click', () => {
+  void loadReadyQueue();
 });
 
 void initializePopup();

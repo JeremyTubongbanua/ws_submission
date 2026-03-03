@@ -10,6 +10,19 @@
     <main class="shell">
       <h1>Comment Filler</h1>
       <p class="subhead">Paste comment text, then fill the active comment box on the current tab.</p>
+      <section class="api-shell" aria-labelledby="apiHeading">
+        <div class="api-header">
+          <h2 id="apiHeading">API</h2>
+          <p>Connect to <code>api.thecopilotmarketer.ca</code> and load ready-to-publish items.</p>
+        </div>
+        <label class="field" for="apiKey">DB API key</label>
+        <input id="apiKey" type="password" placeholder="Paste DB API key" />
+        <div class="api-actions">
+          <button id="saveApiKeyButton" type="button" class="secondary">Save API Key</button>
+          <button id="loadQueueButton" type="button">Load Ready Queue</button>
+        </div>
+        <div id="queueList" class="queue-list"></div>
+      </section>
       <p id="presetBanner" class="preset-banner" hidden></p>
       <section class="preset-list-shell" aria-labelledby="presetListHeading">
         <div class="preset-list-header">

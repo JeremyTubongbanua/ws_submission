@@ -32,6 +32,82 @@ h1 {
   background: #dff2eb;
 }
 
+.api-shell {
+  margin: 0 0 14px;
+  border: 1px solid #d5dfdb;
+  border-radius: 14px;
+  background: #fffdf7;
+  padding: 12px;
+}
+
+.api-header h2 {
+  margin: 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.api-header p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #5b6763;
+}
+
+input {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #b9c4bf;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  background: #fffdf7;
+}
+
+.api-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.api-actions button {
+  margin-top: 0;
+}
+
+.queue-list {
+  max-height: 180px;
+  margin-top: 12px;
+  overflow: auto;
+  border-top: 1px solid #eef2ef;
+}
+
+.queue-card {
+  padding: 10px 0;
+  border-top: 1px solid #eef2ef;
+}
+
+.queue-card:first-child {
+  border-top: 0;
+}
+
+.queue-card button {
+  margin-top: 8px;
+}
+
+.queue-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.queue-meta {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #5b6763;
+}
+
 .preset-list-shell {
   margin: 0 0 14px;
   border: 1px solid #d5dfdb;
