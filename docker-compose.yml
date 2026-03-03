@@ -1,0 +1,74 @@
+version: "3.9"
+
+services:
+  db_api:
+    build:
+      context: .
+      dockerfile: packages/db_api/Dockerfile
+    env_file:
+      - packages/db_api/.env
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  scraper_daemon:
+    build:
+      context: .
+      dockerfile: packages/scraper_daemon/Dockerfile
+    env_file:
+      - packages/scraper_daemon/.env
+    environment:
+      DB_API_BASE_URL: http://db_api:8000
+    depends_on:
+      - db_api
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+
+  filter_agent:
+    build:
+      context: .
+      dockerfile: packages/agents/filter_agent/Dockerfile
+    env_file:
+      - packages/agents/.env
+    environment:
+      DB_API_BASE_URL: http://db_api:8000
+    depends_on:
+      - db_api
+    ports:
+      - "8002:8002"
+    restart: unless-stopped
+
+  comment_agent:
+    build:
+      context: .
+      dockerfile: packages/agents/comment_agent/Dockerfile
+    env_file:
+      - packages/agents/.env
+    environment:
+      DB_API_BASE_URL: http://db_api:8000
+    depends_on:
+      - db_api
+    ports:
+      - "8003:8003"
+    restart: unless-stopped
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: packages/dashboard/Dockerfile
+    env_file:
+      - packages/db_api/.env
+    environment:
+      DB_API_BASE_URL: http://db_api:8000
+      SCRAPER_DAEMON_BASE_URL: http://scraper_daemon:8001
+      FILTER_AGENT_BASE_URL: http://filter_agent:8002
+      COMMENT_AGENT_BASE_URL: http://comment_agent:8003
+    depends_on:
+      - db_api
+      - scraper_daemon
+      - filter_agent
+      - comment_agent
+    ports:
+      - "3000:3000"
+    restart: unless-stopped

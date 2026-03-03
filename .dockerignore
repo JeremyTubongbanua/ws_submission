@@ -1,0 +1,15 @@
+.git
+.gitignore
+.logs
+**/.next
+**/node_modules
+**/.venv
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.DS_Store
+**/*.egg-info
+README.md
+LICENSE
+docs/arch_diagram.png
