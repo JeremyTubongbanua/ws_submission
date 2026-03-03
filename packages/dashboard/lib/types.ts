@@ -3,7 +3,8 @@ export type QueueView =
   | 'opportunity_review'
   | 'drafting_queue'
   | 'approval_review'
-  | 'ready_to_publish';
+  | 'ready_to_publish'
+  | 'trash';
 
 export type QueueResponse = {
   items: Record<string, unknown>[];
@@ -18,4 +19,5 @@ export const QUEUE_VIEWS: QueueView[] = [
   'drafting_queue',
   'approval_review',
   'ready_to_publish',
+  'trash',
 ];

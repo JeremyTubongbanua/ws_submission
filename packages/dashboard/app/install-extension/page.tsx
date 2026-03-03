@@ -5,14 +5,19 @@ import { useEffect, useState } from 'react';
 export default function InstallExtensionPage() {
   const [platform, setPlatform] = useState<'windows' | 'unix'>('windows');
   const [copiedKey, setCopiedKey] = useState<'install' | 'uninstall' | null>(null);
+  const [snackbar, setSnackbar] = useState<string | null>(null);
 
   useEffect(() => {
     const userPlatform = window.navigator.platform.toLowerCase();
     if (userPlatform.includes('win')) {
       setPlatform('windows');
+      setSnackbar('Windows detected. Showing Windows terminal commands.');
+      window.setTimeout(() => setSnackbar(null), 2200);
       return;
     }
     setPlatform('unix');
+    setSnackbar('macOS/Linux detected. Showing macOS/Linux terminal commands.');
+    window.setTimeout(() => setSnackbar(null), 2200);
   }, []);
 
   const installCommand =
@@ -46,6 +51,11 @@ rm -rf thecopilotmarketer-extension`;
   return (
     <main className="min-h-screen px-4 py-8 md:px-8 lg:px-12">
       <section className="mx-auto max-w-4xl rounded-3xl border border-black/10 bg-white p-6 shadow-card md:p-8">
+        {snackbar && (
+          <div className="mb-4 rounded-2xl border border-[#cfe4dc] bg-[#edf8f4] px-4 py-3 text-sm font-medium text-[#0d4d46]">
+            {snackbar}
+          </div>
+        )}
         <button
           type="button"
           onClick={() => window.history.back()}

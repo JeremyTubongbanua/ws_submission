@@ -6,7 +6,6 @@ const ACTIVE_TASK_STORAGE = 'wsActiveTask';
 const apiKeyInput = document.getElementById('apiKey');
 const saveApiKeyButton = document.getElementById('saveApiKeyButton');
 const loadQueueButton = document.getElementById('loadQueueButton');
-const clearQueueButton = document.getElementById('clearQueueButton');
 const queueList = document.getElementById('queueList');
 const statusNode = document.getElementById('status');
 
@@ -39,7 +38,7 @@ async function loadApiKey() {
 async function saveApiKey() {
   const apiKey = apiKeyInput.value.trim();
   await setInStorage({ [API_KEY_STORAGE]: apiKey });
-  setStatus(apiKey ? 'API key saved.' : 'Saved empty API key.', !apiKey);
+  setStatus(apiKey ? 'Password saved.' : 'Saved empty password.', !apiKey);
 }
 
 function queueItemComment(item) {
@@ -54,7 +53,7 @@ async function loadLocalQueue() {
 async function fetchReadyQueue() {
   const apiKey = apiKeyInput.value.trim();
   if (!apiKey) {
-    setStatus('Save the DB API key first.', true);
+    setStatus('Save the password first.', true);
     return;
   }
 
@@ -95,6 +94,43 @@ async function deleteQueueItem(contentId) {
   }
   renderQueue(next);
   setStatus('Removed item from local queue.');
+}
+
+async function reportItemStatus(item, status) {
+  const apiKey = apiKeyInput.value.trim();
+  if (!apiKey) {
+    setStatus('Save the password first.', true);
+    return;
+  }
+
+  if (!item?.id) {
+    setStatus('Queue item is missing a content id.', true);
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/v1/extension/tasks/${item.id}/status`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': apiKey,
+      },
+      body: JSON.stringify({
+        status,
+        generated_comment_id: item?.selected_comment?.id || null,
+        actor: 'user',
+        actor_label: 'chrome-extension',
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.detail || `Failed (${response.status})`);
+    }
+    await deleteQueueItem(item.id);
+    setStatus(status === 'submitted' ? 'Marked item finished.' : 'Marked item skipped.');
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : 'Failed to update API status.', true);
+  }
 }
 
 async function openAndPrepare(item) {
@@ -189,23 +225,23 @@ function renderQueue(items) {
     });
     actions.appendChild(openButton);
 
-    const fillButton = document.createElement('button');
-    fillButton.type = 'button';
-    fillButton.className = 'secondary';
-    fillButton.textContent = 'Autofill';
-    fillButton.addEventListener('click', () => {
-      void autofillOnActiveTab(item);
+    const finishedButton = document.createElement('button');
+    finishedButton.type = 'button';
+    finishedButton.className = 'secondary';
+    finishedButton.textContent = 'Set Finished';
+    finishedButton.addEventListener('click', () => {
+      void reportItemStatus(item, 'submitted');
     });
-    actions.appendChild(fillButton);
+    actions.appendChild(finishedButton);
 
-    const deleteButton = document.createElement('button');
-    deleteButton.type = 'button';
-    deleteButton.className = 'ghost';
-    deleteButton.textContent = 'Delete';
-    deleteButton.addEventListener('click', () => {
-      void deleteQueueItem(item.id);
+    const skippedButton = document.createElement('button');
+    skippedButton.type = 'button';
+    skippedButton.className = 'ghost';
+    skippedButton.textContent = 'Set Skipped';
+    skippedButton.addEventListener('click', () => {
+      void reportItemStatus(item, 'deleted');
     });
-    actions.appendChild(deleteButton);
+    actions.appendChild(skippedButton);
 
     card.appendChild(actions);
     queueList.appendChild(card);
@@ -218,10 +254,6 @@ saveApiKeyButton.addEventListener('click', () => {
 
 loadQueueButton.addEventListener('click', () => {
   void fetchReadyQueue();
-});
-
-clearQueueButton.addEventListener('click', () => {
-  void clearQueue();
 });
 
 void loadApiKey();

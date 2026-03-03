@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { QueueView } from '@/lib/types';
+import { validateDashboardKey } from '@/lib/serverAuth';
 
 const VALID_VIEWS = new Set<QueueView>([
   'ingested',
@@ -7,12 +8,18 @@ const VALID_VIEWS = new Set<QueueView>([
   'drafting_queue',
   'approval_review',
   'ready_to_publish',
+  'trash',
 ]);
 
 export async function GET(
   req: NextRequest,
   { params }: { params: { view: string } },
 ) {
+  const auth = validateDashboardKey(req);
+  if (!auth.ok) {
+    return NextResponse.json({ detail: auth.message }, { status: 401 });
+  }
+
   if (!VALID_VIEWS.has(params.view as QueueView)) {
     return NextResponse.json({ detail: 'Invalid view' }, { status: 400 });
   }
@@ -21,7 +28,7 @@ export async function GET(
   const token = process.env.DB_API_SERVICE_TOKEN;
   if (!token) {
     return NextResponse.json(
-      { detail: 'Missing DB_API_SERVICE_TOKEN in dashboard env' },
+      { detail: 'Missing Password in dashboard env' },
       { status: 500 },
     );
   }

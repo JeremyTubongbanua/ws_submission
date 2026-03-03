@@ -6,7 +6,8 @@ body {
 }
 
 .shell {
-  padding: 16px;
+  max-width: 100%;
+  padding: 14px;
 }
 
 .hero {
@@ -24,13 +25,13 @@ body {
 
 h1 {
   margin: 6px 0 0;
-  font-size: 24px;
+  font-size: 20px;
 }
 
 .subhead {
   margin: 8px 0 0;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.45;
   color: #44514d;
 }
 
@@ -39,7 +40,7 @@ h1 {
   border: 1px solid #d5dfdb;
   border-radius: 18px;
   background: #fffdf7;
-  padding: 14px;
+  padding: 12px;
 }
 
 .field {
@@ -57,28 +58,29 @@ input {
   width: 100%;
   border: 1px solid #b9c4bf;
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 9px 11px;
   font: inherit;
   background: #fffdf7;
 }
 
 .actions {
-  display: flex;
+  display: grid;
   gap: 8px;
   margin-top: 12px;
 }
 
 .two-up {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
 }
 
 button {
   border: 0;
   border-radius: 999px;
-  padding: 10px 14px;
+  width: 100%;
+  padding: 9px 12px;
   font: inherit;
   font-weight: 700;
+  font-size: 12px;
   color: white;
   background: #0d6d62;
   cursor: pointer;
@@ -112,7 +114,7 @@ button.ghost {
 
 h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -132,39 +134,41 @@ h2 {
 
 .queue-title {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
+  line-height: 1.4;
 }
 
 .queue-meta {
   margin: 8px 0 0;
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 11px;
+  line-height: 1.4;
   color: #5b6763;
+  word-break: break-word;
 }
 
 .queue-comment {
   margin: 10px 0 0;
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 11px;
+  line-height: 1.5;
   color: #394541;
   white-space: pre-wrap;
 }
 
 .queue-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 8px;
   margin-top: 12px;
 }
 
 .queue-actions.three-up {
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr;
 }
 
 .status {
   min-height: 18px;
   margin: 6px 2px 0;
-  font-size: 12px;
+  font-size: 11px;
   color: #44514d;
 }

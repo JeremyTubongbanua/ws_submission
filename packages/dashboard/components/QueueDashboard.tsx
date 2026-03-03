@@ -5,6 +5,11 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 
 import type { QueueResponse, QueueView } from '@/lib/types';
 import { QUEUE_VIEWS } from '@/lib/types';
 import { ACTORS, type ActorId, type ActorRunResponse } from '@/lib/actors';
+import {
+  clearStoredDashboardKey,
+  getStoredDashboardKey,
+  setStoredDashboardKey,
+} from '@/lib/clientAuth';
 
 const DEFAULT_VISIBLE_COLUMNS = new Set([
   'state',
@@ -19,8 +24,12 @@ const DEFAULT_VISIBLE_COLUMNS = new Set([
 
 type SortDirection = 'asc' | 'desc';
 
-const fetcher = async (url: string): Promise<QueueResponse> => {
-  const response = await fetch(url);
+const fetcher = async (url: string, dashboardKey: string): Promise<QueueResponse> => {
+  const response = await fetch(url, {
+    headers: {
+      'x-dashboard-key': dashboardKey,
+    },
+  });
   if (!response.ok) {
     const text = await response.text();
     throw new Error(text || `Failed (${response.status})`);
@@ -212,6 +221,9 @@ function isImageUrl(value: unknown): value is string {
 }
 
 export default function QueueDashboard() {
+  const [dashboardKey, setDashboardKeyState] = useState<string>('');
+  const [pendingDashboardKey, setPendingDashboardKey] = useState<string>('');
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
   const [selected, setSelected] = useState<QueueView>('ingested');
   const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null);
   const [data, setData] = useState<QueueResponse | null>(null);
@@ -226,9 +238,15 @@ export default function QueueDashboard() {
   });
   const [reviewActionLoading, setReviewActionLoading] = useState<boolean>(false);
   const [reviewActionResult, setReviewActionResult] = useState<Record<string, unknown> | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
+  const [deleteResult, setDeleteResult] = useState<Record<string, unknown> | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({});
   const [sortState, setSortState] = useState<{ column: string; direction: SortDirection } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkTargetState, setBulkTargetState] = useState<string>('');
+  const [bulkActionLoading, setBulkActionLoading] = useState<boolean>(false);
+  const [bulkActionResult, setBulkActionResult] = useState<Record<string, unknown> | null>(null);
   const resizeStateRef = useRef<{
     column: string;
     startX: number;
@@ -236,6 +254,7 @@ export default function QueueDashboard() {
   } | null>(null);
 
   const runActor = async (actor: ActorId) => {
+    if (!dashboardKey) return;
     setActorLoading((current) => ({ ...current, [actor]: true }));
     const cycles = Math.max(1, Math.min(5, Number(actorCycles[actor] || 1)));
     try {
@@ -243,6 +262,7 @@ export default function QueueDashboard() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-dashboard-key': dashboardKey,
         },
         body: JSON.stringify({ cycles, limit: 1 }),
       });
@@ -263,20 +283,44 @@ export default function QueueDashboard() {
   };
 
   const load = async () => {
+    if (!dashboardKey) return;
     setIsLoading(true);
     setError(null);
     try {
-      const payload = await fetcher(`/api/view/${selected}?limit=100&offset=0`);
+      const payload = await fetcher(`/api/view/${selected}?limit=100&offset=0`, dashboardKey);
       setData(payload);
     } catch (err) {
-      setError(String(err));
+      const message = String(err);
+      setError(message);
+      if (message.includes('401')) {
+        clearStoredDashboardKey();
+        setDashboardKeyState('');
+        setPendingDashboardKey('');
+        setIsUnlocked(false);
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
+    const stored = getStoredDashboardKey();
+    if (stored) {
+      setDashboardKeyState(stored);
+      setPendingDashboardKey(stored);
+      setIsUnlocked(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isUnlocked) return;
     void load();
+  }, [selected, isUnlocked, dashboardKey]);
+
+  useEffect(() => {
+    setSelectedIds([]);
+    setBulkTargetState('');
+    setBulkActionResult(null);
   }, [selected]);
 
   const columns = (() => {
@@ -316,6 +360,7 @@ export default function QueueDashboard() {
     }
     return items;
   })();
+  const selectedIdSet = new Set(selectedIds);
 
   useEffect(() => {
     const onMouseMove = (event: MouseEvent) => {
@@ -384,20 +429,27 @@ export default function QueueDashboard() {
   const selectedPostedOn = formatDateTime(selectedRow?.source_created_at);
   const selectedIndex = sortedItems.findIndex((row) => String(row.id ?? '') === selectedId);
   const selectedOutboundUrl = selectedRawPayload.outbound_url;
+  const selectedAgentSummary =
+    typeof selectedRow?.agent_summary === 'string' ? selectedRow.agent_summary : '';
 
   const reviewAction =
     selectedState === 'ingested'
       ? {
           actions: [
             {
-              action: 'move_ingested_to_opportunity_review' as const,
+              targetState: 'opportunity_review' as const,
               label: 'Move To Opportunity Review',
               nextState: 'opportunity_review',
             },
             {
-              action: 'move_ingested_to_drafting' as const,
+              targetState: 'drafting_queue' as const,
               label: 'Move Directly To Drafting Queue',
               nextState: 'drafting_queue',
+            },
+            {
+              targetState: 'trash' as const,
+              label: 'Move To Trash',
+              nextState: 'trash',
             },
           ],
         }
@@ -405,9 +457,14 @@ export default function QueueDashboard() {
       ? {
           actions: [
             {
-              action: 'move_to_drafting' as const,
+              targetState: 'drafting_queue' as const,
               label: 'Move To Drafting Queue',
               nextState: 'drafting_queue',
+            },
+            {
+              targetState: 'trash' as const,
+              label: 'Move To Trash',
+              nextState: 'trash',
             },
           ],
         }
@@ -415,20 +472,21 @@ export default function QueueDashboard() {
         ? {
             actions: [
               {
-                action: 'move_to_ready' as const,
+                targetState: 'ready_to_publish' as const,
                 label: 'Move To Ready To Publish',
                 nextState: 'ready_to_publish',
+              },
+              {
+                targetState: 'trash' as const,
+                label: 'Move To Trash',
+                nextState: 'trash',
               },
             ],
           }
         : null;
 
   const runReviewAction = async (actionConfig: {
-    action:
-      | 'move_ingested_to_opportunity_review'
-      | 'move_ingested_to_drafting'
-      | 'move_to_drafting'
-      | 'move_to_ready';
+    targetState: 'opportunity_review' | 'drafting_queue' | 'ready_to_publish' | 'trash';
     nextState: string;
   }) => {
     if (!selectedId) return;
@@ -440,10 +498,11 @@ export default function QueueDashboard() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-dashboard-key': dashboardKey,
         },
         body: JSON.stringify({
-          action: actionConfig.action,
-          contentId: selectedId,
+          targetState: actionConfig.targetState,
+          contentIds: [selectedId],
         }),
       });
       const payload = await response.json();
@@ -467,6 +526,95 @@ export default function QueueDashboard() {
     }
   };
 
+  const permanentlyDeleteSelected = async () => {
+    if (!selectedId) return;
+    setDeleteLoading(true);
+    setDeleteResult(null);
+    try {
+      const response = await fetch(`/api/content/${selectedId}`, {
+        method: 'DELETE',
+        headers: {
+          'x-dashboard-key': dashboardKey,
+        },
+      });
+      const payload = await response.json();
+      setDeleteResult(payload);
+      if (!response.ok) {
+        throw new Error(payload.detail || `Failed (${response.status})`);
+      }
+      setSelectedRow(null);
+      await load();
+    } catch (err) {
+      setDeleteResult({ detail: String(err) });
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const bulkOptionsByView: Record<QueueView, { value: string; label: string }[]> = {
+    ingested: [
+      { value: 'opportunity_review', label: 'Opportunity Review' },
+      { value: 'drafting_queue', label: 'Drafting Queue' },
+      { value: 'trash', label: 'Trash' },
+    ],
+    opportunity_review: [
+      { value: 'drafting_queue', label: 'Drafting Queue' },
+      { value: 'trash', label: 'Trash' },
+    ],
+    drafting_queue: [{ value: 'trash', label: 'Trash' }],
+    approval_review: [
+      { value: 'ready_to_publish', label: 'Ready To Publish' },
+      { value: 'trash', label: 'Trash' },
+    ],
+    ready_to_publish: [{ value: 'trash', label: 'Trash' }],
+    trash: [],
+  };
+
+  const bulkOptions = bulkOptionsByView[selected];
+  const allVisibleIds = sortedItems.map((row) => String(row.id ?? '')).filter(Boolean);
+  const allSelected = allVisibleIds.length > 0 && allVisibleIds.every((id) => selectedIdSet.has(id));
+
+  const toggleRowSelection = (contentId: string, checked: boolean) => {
+    setSelectedIds((current) =>
+      checked ? Array.from(new Set([...current, contentId])) : current.filter((id) => id !== contentId),
+    );
+  };
+
+  const toggleSelectAll = (checked: boolean) => {
+    setSelectedIds(checked ? allVisibleIds : []);
+  };
+
+  const runBulkMove = async () => {
+    if (!bulkTargetState || !selectedIds.length) return;
+    setBulkActionLoading(true);
+    setBulkActionResult(null);
+    try {
+      const response = await fetch('/api/review-action', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-dashboard-key': dashboardKey,
+        },
+        body: JSON.stringify({
+          targetState: bulkTargetState,
+          contentIds: selectedIds,
+        }),
+      });
+      const payload = await response.json();
+      setBulkActionResult(payload);
+      if (!response.ok && response.status !== 207) {
+        throw new Error(payload.detail || `Failed (${response.status})`);
+      }
+      setSelectedIds([]);
+      setSelectedRow(null);
+      await load();
+    } catch (err) {
+      setBulkActionResult({ detail: String(err) });
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
   const selectRelativeRow = (direction: -1 | 1) => {
     if (selectedIndex < 0) return;
     const nextIndex = selectedIndex + direction;
@@ -486,9 +634,72 @@ export default function QueueDashboard() {
     });
   };
 
+  const submitDashboardKey = async () => {
+    const trimmed = pendingDashboardKey.trim();
+    if (!trimmed) {
+      setError('Enter the password.');
+      return;
+    }
+
+    try {
+      await fetcher(`/api/view/ingested?limit=1&offset=0`, trimmed);
+      setStoredDashboardKey(trimmed);
+      setDashboardKeyState(trimmed);
+      setIsUnlocked(true);
+      setError(null);
+    } catch (err) {
+      setError('Invalid password.');
+      setIsUnlocked(false);
+    }
+  };
+
   return (
     <main className="min-h-screen px-4 py-6 md:px-8 lg:px-12">
       <section className="mx-auto max-w-7xl">
+        {!isUnlocked && (
+          <section className="mb-6 rounded-2xl border border-black/10 bg-white p-6 shadow-card">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-tide">TheCopilotMarketer</p>
+            <h1 className="mt-2 text-3xl font-bold md:text-4xl">Enter Password</h1>
+            <p className="mt-2 max-w-2xl text-sm text-ink/70">
+              Paste the password to unlock the dashboard. It will be saved in local browser storage so you do not need to enter it every time.
+            </p>
+            <div className="mt-4 flex max-w-xl flex-col gap-3">
+              <input
+                type="password"
+                value={pendingDashboardKey}
+                onChange={(event) => setPendingDashboardKey(event.target.value)}
+                className="rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-ink"
+                placeholder="Paste Password"
+              />
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void submitDashboardKey();
+                  }}
+                  className="rounded-full border border-tide bg-tide px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Unlock Dashboard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearStoredDashboardKey();
+                    setPendingDashboardKey('');
+                    setDashboardKeyState('');
+                    setError(null);
+                  }}
+                  className="rounded-full border border-black/10 bg-white px-4 py-2 text-sm font-semibold text-ink"
+                >
+                  Clear Saved Key
+                </button>
+              </div>
+              {error && <p className="text-sm text-red-700">{error}</p>}
+            </div>
+          </section>
+        )}
+        {isUnlocked && (
+          <>
         <header className="mb-6 rounded-2xl border border-black/10 bg-shell p-6 shadow-card">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -614,6 +825,38 @@ export default function QueueDashboard() {
                   </label>
                 ))}
               </div>
+              {bulkOptions.length > 0 && (
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <label className="text-sm font-semibold text-ink/80">Move to :</label>
+                  <select
+                    value={bulkTargetState}
+                    onChange={(event) => setBulkTargetState(event.target.value)}
+                    className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-ink"
+                  >
+                    <option value="">Select state</option>
+                    {bulkOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void runBulkMove();
+                    }}
+                    disabled={bulkActionLoading || !bulkTargetState || selectedIds.length === 0}
+                    className="rounded-full border border-tide bg-tide px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {bulkActionLoading ? 'Applying...' : `Apply To ${selectedIds.length} Selected`}
+                  </button>
+                </div>
+              )}
+              {bulkActionResult && (
+                <pre className="mt-3 max-h-40 overflow-auto rounded-xl bg-[#0f1820] p-3 text-xs text-[#d8fff7]">
+                  {JSON.stringify(bulkActionResult, null, 2)}
+                </pre>
+              )}
             </div>
 
             {isLoading && <p className="p-4 text-sm text-ink/70">Loading queue...</p>}
@@ -624,6 +867,15 @@ export default function QueueDashboard() {
                 <table className="min-w-full text-sm">
                   <thead className="sticky top-0 bg-[#edf5f3] text-left">
                     <tr>
+                      <th className="border-b border-black/10 px-3 py-2 font-semibold">
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={(event) => toggleSelectAll(event.target.checked)}
+                          aria-label="Select all visible rows"
+                          className="h-4 w-4 rounded border-black/20"
+                        />
+                      </th>
                       {displayedColumns.map((column) => (
                         <th
                           key={column}
@@ -664,6 +916,19 @@ export default function QueueDashboard() {
                         onClick={() => setSelectedRow(row)}
                         className="cursor-pointer border-b border-black/5 odd:bg-white even:bg-[#fcfbf8] hover:bg-[#e8f7f3]"
                       >
+                        <td className="px-3 py-2 align-top">
+                          <input
+                            type="checkbox"
+                            checked={selectedIdSet.has(String(row.id ?? ''))}
+                            onChange={(event) => {
+                              event.stopPropagation();
+                              toggleRowSelection(String(row.id ?? ''), event.target.checked);
+                            }}
+                            onClick={(event) => event.stopPropagation()}
+                            aria-label={`Select ${String(row.id ?? index)}`}
+                            className="h-4 w-4 rounded border-black/20"
+                          />
+                        </td>
                         {displayedColumns.map((column) => (
                           <td
                             key={column}
@@ -752,10 +1017,30 @@ export default function QueueDashboard() {
                         No human review action available for this state.
                       </p>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void permanentlyDeleteSelected();
+                      }}
+                      disabled={deleteLoading}
+                      className="mt-3 block rounded-full border border-red-700 bg-red-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {deleteLoading ? 'Deleting...' : 'Delete Permanently'}
+                    </button>
                   </div>
 
                   <section className="min-w-0 rounded-xl border border-black/10 bg-white p-4">
                     <p className="text-xs font-bold uppercase tracking-wide text-ink/60">Post Summary</p>
+                    {selectedAgentSummary && (
+                      <div className="mt-3 max-w-3xl rounded-2xl border border-[#ead79e] bg-[#fff4c7] px-4 py-3">
+                        <p className="text-xs font-bold uppercase tracking-wide text-[#7b5d00]">
+                          Agent Summary
+                        </p>
+                        <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-[#5f4b00]">
+                          {selectedAgentSummary}
+                        </p>
+                      </div>
+                    )}
                     {selectedSubreddit && (
                       <p className="mt-2 text-sm font-semibold text-tide">r/{selectedSubreddit}</p>
                     )}
@@ -880,6 +1165,11 @@ export default function QueueDashboard() {
                       {JSON.stringify(reviewActionResult, null, 2)}
                     </pre>
                   )}
+                  {deleteResult && (
+                    <pre className="max-h-40 max-w-full overflow-auto rounded-xl bg-[#201010] p-3 text-xs text-[#ffd8d8]">
+                      {JSON.stringify(deleteResult, null, 2)}
+                    </pre>
+                  )}
                 </div>
 
                 <pre className="mt-3 max-h-[320px] max-w-full overflow-auto rounded-xl bg-[#0f1820] p-3 text-xs text-[#d8fff7]">
@@ -889,6 +1179,8 @@ export default function QueueDashboard() {
             )}
           </aside>
         </section>
+          </>
+        )}
       </section>
     </main>
   );

@@ -54,6 +54,10 @@ class HumanReviewMoveRequest(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
+class ManualMoveRequest(HumanReviewMoveRequest):
+    target_state: Literal["opportunity_review", "drafting_queue", "ready_to_publish", "trash"]
+
+
 class ExtensionStatusRequest(BaseModel):
     status: Literal["submitted", "deleted"]
     generated_comment_id: UUID | None = None
@@ -88,6 +92,7 @@ VIEW_MAP: dict[str, str] = {
     "drafting_queue": "v_drafting_queue",
     "approval_review": "v_approval_review",
     "ready_to_publish": "v_ready_to_publish",
+    "trash": "v_trashed",
 }
 
 
@@ -117,6 +122,80 @@ def _read_state_or_404(content_id: str) -> dict[str, Any]:
     if not state:
         raise HTTPException(status_code=404, detail="content_id not found")
     return state
+
+
+def _manual_move_content(content_id_str: str, request: ManualMoveRequest) -> dict[str, Any]:
+    current_state = _read_state_or_404(content_id_str)
+    current_state_name = current_state.get("state")
+    is_trashed = bool(current_state.get("is_trashed"))
+
+    allowed_targets: dict[str, set[str]] = {
+        "ingested": {"opportunity_review", "drafting_queue", "trash"},
+        "opportunity_review": {"drafting_queue", "trash"},
+        "approval_review": {"ready_to_publish", "trash"},
+        "drafting_queue": {"trash"},
+        "ready_to_publish": {"trash"},
+    }
+
+    if is_trashed:
+        raise HTTPException(status_code=409, detail="Content is already trashed")
+    if current_state_name not in allowed_targets:
+        raise HTTPException(status_code=409, detail="Current state cannot be moved manually")
+    if request.target_state not in allowed_targets[current_state_name]:
+        raise HTTPException(status_code=409, detail="Invalid manual transition")
+
+    if request.target_state == "trash":
+        updated = client.update_rows(
+            "content_state",
+            filters={"content_id": _to_eq(content_id_str)},
+            changes={
+                "is_trashed": True,
+                "trashed_at": _now_iso(),
+                "trashed_reason": "manual_dashboard_move",
+                "last_transition_at": _now_iso(),
+            },
+        )
+        logged = log_transactions(
+            client,
+            [
+                tx_row(
+                    content_id=content_id_str,
+                    action="trashed",
+                    actor=request.actor,
+                    actor_label=request.actor_label,
+                    from_state=current_state_name,
+                    details={"via": "human_review", **request.details},
+                )
+            ],
+        )
+    else:
+        updated = client.update_rows(
+            "content_state",
+            filters={"content_id": _to_eq(content_id_str)},
+            changes={
+                "state": request.target_state,
+                "is_trashed": False,
+                "trashed_at": None,
+                "trashed_reason": None,
+                "last_transition_at": _now_iso(),
+            },
+        )
+        logged = log_transactions(
+            client,
+            [
+                tx_row(
+                    content_id=content_id_str,
+                    action="approved" if request.target_state == "ready_to_publish" else "state_moved",
+                    actor=request.actor,
+                    actor_label=request.actor_label,
+                    from_state=current_state_name,
+                    to_state=request.target_state,
+                    details={"via": "human_review", **request.details},
+                )
+            ],
+        )
+
+    return {"content_state": updated[0] if updated else None, "transactions": logged}
 
 
 def _queue_response(relation: str, *, limit: int, offset: int) -> dict[str, Any]:
@@ -307,7 +386,12 @@ def classify_ingested(content_id: UUID, request: ClassifyRequest) -> dict[str, A
         updated = client.update_rows(
             "content_state",
             filters={"content_id": _to_eq(content_id_str)},
-            changes={"state": "opportunity_review", "last_transition_at": _now_iso()},
+            changes={
+                "state": "opportunity_review",
+                "last_transition_at": _now_iso(),
+                "ai_confidence": request.details.get("confidence"),
+                "agent_summary": request.details.get("summary"),
+            },
         )
         txs.append(
             tx_row(
@@ -328,6 +412,8 @@ def classify_ingested(content_id: UUID, request: ClassifyRequest) -> dict[str, A
                 "is_trashed": True,
                 "trashed_at": _now_iso(),
                 "trashed_reason": request.reason or "scraper_triage_rejected",
+                "ai_confidence": request.details.get("confidence"),
+                "agent_summary": request.details.get("summary"),
                 "last_transition_at": _now_iso(),
             },
         )
@@ -350,66 +436,18 @@ def classify_ingested(content_id: UUID, request: ClassifyRequest) -> dict[str, A
 def move_ingested_to_opportunity_review(
     content_id: UUID, request: HumanReviewMoveRequest
 ) -> dict[str, Any]:
-    content_id_str = str(content_id)
-    current_state = _read_state_or_404(content_id_str)
-    if current_state.get("is_trashed"):
-        raise HTTPException(status_code=409, detail="Content is already trashed")
-    if current_state.get("state") != "ingested":
-        raise HTTPException(status_code=409, detail="Content must be in ingested")
-
-    updated = client.update_rows(
-        "content_state",
-        filters={"content_id": _to_eq(content_id_str)},
-        changes={"state": "opportunity_review", "last_transition_at": _now_iso()},
+    return _manual_move_content(
+        str(content_id),
+        ManualMoveRequest(**_to_payload(request), target_state="opportunity_review"),
     )
-
-    logged = log_transactions(
-        client,
-        [
-            tx_row(
-                content_id=content_id_str,
-                action="state_moved",
-                actor=request.actor,
-                actor_label=request.actor_label,
-                from_state="ingested",
-                to_state="opportunity_review",
-                details={"via": "human_review", **request.details},
-            )
-        ],
-    )
-    return {"content_state": updated[0] if updated else None, "transactions": logged}
 
 
 @app.post("/v1/queues/ingested/{content_id}/move-to-drafting", dependencies=[Depends(_require_auth)])
 def move_ingested_to_drafting(content_id: UUID, request: HumanReviewMoveRequest) -> dict[str, Any]:
-    content_id_str = str(content_id)
-    current_state = _read_state_or_404(content_id_str)
-    if current_state.get("is_trashed"):
-        raise HTTPException(status_code=409, detail="Content is already trashed")
-    if current_state.get("state") != "ingested":
-        raise HTTPException(status_code=409, detail="Content must be in ingested")
-
-    updated = client.update_rows(
-        "content_state",
-        filters={"content_id": _to_eq(content_id_str)},
-        changes={"state": "drafting_queue", "last_transition_at": _now_iso()},
+    return _manual_move_content(
+        str(content_id),
+        ManualMoveRequest(**_to_payload(request), target_state="drafting_queue"),
     )
-
-    logged = log_transactions(
-        client,
-        [
-            tx_row(
-                content_id=content_id_str,
-                action="state_moved",
-                actor=request.actor,
-                actor_label=request.actor_label,
-                from_state="ingested",
-                to_state="drafting_queue",
-                details={"via": "human_review", **request.details},
-            )
-        ],
-    )
-    return {"content_state": updated[0] if updated else None, "transactions": logged}
 
 
 @app.get("/v1/queues/drafting", dependencies=[Depends(_require_auth)])
@@ -422,34 +460,10 @@ def read_drafting_queue(
 
 @app.post("/v1/queues/opportunity-review/{content_id}/move-to-drafting", dependencies=[Depends(_require_auth)])
 def move_opportunity_review_to_drafting(content_id: UUID, request: HumanReviewMoveRequest) -> dict[str, Any]:
-    content_id_str = str(content_id)
-    current_state = _read_state_or_404(content_id_str)
-    if current_state.get("is_trashed"):
-        raise HTTPException(status_code=409, detail="Content is already trashed")
-    if current_state.get("state") != "opportunity_review":
-        raise HTTPException(status_code=409, detail="Content must be in opportunity_review")
-
-    updated = client.update_rows(
-        "content_state",
-        filters={"content_id": _to_eq(content_id_str)},
-        changes={"state": "drafting_queue", "last_transition_at": _now_iso()},
+    return _manual_move_content(
+        str(content_id),
+        ManualMoveRequest(**_to_payload(request), target_state="drafting_queue"),
     )
-
-    logged = log_transactions(
-        client,
-        [
-            tx_row(
-                content_id=content_id_str,
-                action="state_moved",
-                actor=request.actor,
-                actor_label=request.actor_label,
-                from_state="opportunity_review",
-                to_state="drafting_queue",
-                details={"via": "human_review", **request.details},
-            )
-        ],
-    )
-    return {"content_state": updated[0] if updated else None, "transactions": logged}
 
 
 @app.post("/v1/queues/drafting/{content_id}/generate-comment", dependencies=[Depends(_require_auth)])
@@ -506,34 +520,15 @@ def generate_comment(content_id: UUID, request: GenerateCommentRequest) -> dict[
 
 @app.post("/v1/queues/approval-review/{content_id}/move-to-ready", dependencies=[Depends(_require_auth)])
 def move_approval_review_to_ready(content_id: UUID, request: HumanReviewMoveRequest) -> dict[str, Any]:
-    content_id_str = str(content_id)
-    current_state = _read_state_or_404(content_id_str)
-    if current_state.get("is_trashed"):
-        raise HTTPException(status_code=409, detail="Content is already trashed")
-    if current_state.get("state") != "approval_review":
-        raise HTTPException(status_code=409, detail="Content must be in approval_review")
-
-    updated = client.update_rows(
-        "content_state",
-        filters={"content_id": _to_eq(content_id_str)},
-        changes={"state": "ready_to_publish", "last_transition_at": _now_iso()},
+    return _manual_move_content(
+        str(content_id),
+        ManualMoveRequest(**_to_payload(request), target_state="ready_to_publish"),
     )
 
-    logged = log_transactions(
-        client,
-        [
-            tx_row(
-                content_id=content_id_str,
-                action="approved",
-                actor=request.actor,
-                actor_label=request.actor_label,
-                from_state="approval_review",
-                to_state="ready_to_publish",
-                details={"via": "human_review", **request.details},
-            )
-        ],
-    )
-    return {"content_state": updated[0] if updated else None, "transactions": logged}
+
+@app.post("/v1/content/{content_id}/move", dependencies=[Depends(_require_auth)])
+def manually_move_content(content_id: UUID, request: ManualMoveRequest) -> dict[str, Any]:
+    return _manual_move_content(str(content_id), request)
 
 
 @app.get("/v1/views/{view_name}", dependencies=[Depends(_require_auth)])
@@ -615,3 +610,18 @@ def update_extension_status(content_id: UUID, request: ExtensionStatusRequest) -
 
     logged = log_transactions(client, txs)
     return {"posting_event": posting_event, "transactions": logged}
+
+
+@app.delete("/v1/content/{content_id}", dependencies=[Depends(_require_auth)])
+def permanently_delete_content(content_id: UUID) -> dict[str, Any]:
+    content_id_str = str(content_id)
+    existing = client.get_one("content", filters={"id": _to_eq(content_id_str)})
+    if not existing:
+        raise HTTPException(status_code=404, detail="content_id not found")
+
+    deleted = client.delete_rows("content", filters={"id": _to_eq(content_id_str)})
+    return {
+        "deleted": True,
+        "content_id": content_id_str,
+        "rows": deleted,
+    }

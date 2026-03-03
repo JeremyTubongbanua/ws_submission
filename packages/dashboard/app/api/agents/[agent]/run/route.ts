@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { ActorId } from '@/lib/actors';
+import { validateDashboardKey } from '@/lib/serverAuth';
 
 const AGENT_BASE_URLS: Record<ActorId, string> = {
   scraper_daemon: process.env.SCRAPER_DAEMON_BASE_URL || 'http://127.0.0.1:8001',
@@ -11,6 +12,11 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { agent: string } },
 ) {
+  const auth = validateDashboardKey(req);
+  if (!auth.ok) {
+    return NextResponse.json({ detail: auth.message }, { status: 401 });
+  }
+
   const agent = params.agent as ActorId;
   const baseUrl = AGENT_BASE_URLS[agent];
   if (!baseUrl) {

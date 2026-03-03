@@ -46,9 +46,10 @@ def classify_item(llm: OpenAIResponsesClient, *, model: str, item: dict[str, Any
         "Return JSON only. Decide whether content should move to opportunity review or be trashed. "
         "Favor move_to_opportunity_review only for content clearly relevant to personal finance, investing, broker comparisons, product friction, transfer questions, account issues, or adjacent Wealthsimple opportunities. "
         "Trash memes, low-signal posts, off-topic content, and anything that would require individualized financial advice. "
-        "Return an object with keys: decision, confidence, reason, tags. "
+        "Return an object with keys: decision, confidence, reason, summary, tags. "
         "decision must be exactly one of: move_to_opportunity_review, trash. "
         "confidence must be a number between 0 and 1. "
+        "summary must be a short 1-2 sentence human-readable explanation of why this content is or is not a good engagement opportunity. "
         "tags must be an array of short strings."
     )
     result = llm.json_completion(model=model, instructions=instructions, input_text=build_input_text(item))
@@ -64,6 +65,7 @@ def classify_item(llm: OpenAIResponsesClient, *, model: str, item: dict[str, Any
         "decision": decision,
         "confidence": max(0.0, min(1.0, confidence)),
         "reason": str(result.get("reason") or ""),
+        "summary": str(result.get("summary") or ""),
         "tags": [str(tag) for tag in (result.get("tags") or [])][:10],
     }
 
@@ -101,6 +103,7 @@ def cycle_factory() -> callable:
                         "details": {
                             "confidence": decision["confidence"],
                             "reason": decision["reason"],
+                            "summary": decision["summary"],
                             "tags": decision["tags"],
                         },
                         "reason": decision["reason"] if decision_value == "trash" else None,

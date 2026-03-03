@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateDashboardKey } from '@/lib/serverAuth';
 
-export async function POST(
+export async function DELETE(
   req: NextRequest,
   { params }: { params: { contentId: string } },
 ) {
@@ -19,15 +19,11 @@ export async function POST(
     );
   }
 
-  const payload = await req.text();
-
-  const upstream = await fetch(`${baseUrl}/v1/extension/tasks/${params.contentId}/status`, {
-    method: 'POST',
+  const upstream = await fetch(`${baseUrl}/v1/content/${params.contentId}`, {
+    method: 'DELETE',
     headers: {
-      'Content-Type': 'application/json',
       'X-API-Key': token,
     },
-    body: payload,
     cache: 'no-store',
   });
 

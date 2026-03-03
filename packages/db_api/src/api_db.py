@@ -142,6 +142,19 @@ class SupabaseClient:
             return [payload]
         return []
 
+    def delete_rows(self, table: str, *, filters: dict[str, str]) -> list[dict[str, Any]]:
+        payload = self._request(
+            "DELETE",
+            table,
+            params={"select": "*", **filters},
+            extra_headers={"Prefer": "return=representation"},
+        )
+        if isinstance(payload, list):
+            return payload
+        if isinstance(payload, dict):
+            return [payload]
+        return []
+
 
 def _json_default(value: Any) -> Any:
     if isinstance(value, (datetime, date)):

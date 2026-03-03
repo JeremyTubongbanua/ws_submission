@@ -48,7 +48,7 @@ After installation, the extension should appear in the Chrome toolbar. If not, o
 ### Connect to the production DB API
 
 1. Click the extension icon.
-2. Paste the DB API key into the `DB API key` field.
+2. Paste the password into the `Password` field.
 3. Click `Save API Key`.
 4. Click `Load Ready Queue`.
 
