@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  python-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync db_api deps
+        working-directory: packages/db_api
+        run: uv sync
+
+      - name: Sync scraper_daemon deps
+        working-directory: packages/scraper_daemon
+        run: uv sync
+
+      - name: Sync agents deps
+        working-directory: packages/agents
+        run: uv sync
+
+      - name: Compile Python sources
+        run: |
+          python -m py_compile packages/db_api/src/api_db.py
+          python -m py_compile packages/db_api/src/app.py
+          python -m py_compile packages/scraper_daemon/src/reddit_scraper.py
+          python -m py_compile packages/scraper_daemon/src/app.py
+          python -m py_compile packages/agents/shared_utils.py
+          python -m py_compile packages/agents/filter_agent/src/main.py
+          python -m py_compile packages/agents/filter_agent/src/app.py
+          python -m py_compile packages/agents/comment_agent/src/main.py
+          python -m py_compile packages/agents/comment_agent/src/app.py
+          python -m py_compile packages/agents/triage_manager/src/main.py
+
+  dashboard-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: packages/dashboard/package-lock.json
+
+      - name: Install dashboard deps
+        working-directory: packages/dashboard
+        run: npm ci
+
+      - name: Build dashboard
+        working-directory: packages/dashboard
+        env:
+          DB_API_BASE_URL: http://127.0.0.1:8000
+          DB_API_SERVICE_TOKEN: ci-placeholder-token
+          SCRAPER_DAEMON_BASE_URL: http://127.0.0.1:8001
+          FILTER_AGENT_BASE_URL: http://127.0.0.1:8002
+          COMMENT_AGENT_BASE_URL: http://127.0.0.1:8003
+        run: npm run build
+
+  docker-build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: db_api
+            dockerfile: packages/db_api/Dockerfile
+          - image: scraper_daemon
+            dockerfile: packages/scraper_daemon/Dockerfile
+          - image: filter_agent
+            dockerfile: packages/agents/filter_agent/Dockerfile
+          - image: comment_agent
+            dockerfile: packages/agents/comment_agent/Dockerfile
+          - image: dashboard
+            dockerfile: packages/dashboard/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: false

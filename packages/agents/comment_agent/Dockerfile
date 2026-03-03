@@ -9,7 +9,6 @@ WORKDIR /app/packages/agents/comment_agent
 RUN pip install --no-cache-dir uv
 
 COPY packages/agents /app/packages/agents
-COPY packages/db_api/.env /app/packages/db_api/.env
 
 WORKDIR /app/packages/agents
 RUN uv sync --frozen || uv sync
