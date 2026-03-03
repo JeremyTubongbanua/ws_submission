@@ -201,6 +201,8 @@ def _manual_move_content(content_id_str: str, request: ManualMoveRequest) -> dic
 def _queue_response(relation: str, *, limit: int, offset: int) -> dict[str, Any]:
     try:
         items = client.list_rows(relation, limit=limit, offset=offset)
+        if relation in {"v_approval_review", "v_ready_to_publish"}:
+            items = _enrich_selected_comment_items(items)
         return {"items": items, "limit": limit, "offset": offset, "count": len(items)}
     except SupabaseAPIError as exc:
         # If SQL views are not present in Supabase schema cache yet, use join fallback.
@@ -213,6 +215,8 @@ def _queue_response(relation: str, *, limit: int, offset: int) -> dict[str, Any]
             "v_trashed",
         }:
             items = _queue_fallback(relation=relation, limit=limit, offset=offset)
+            if relation in {"v_approval_review", "v_ready_to_publish"}:
+                items = _enrich_selected_comment_items(items)
             return {"items": items, "limit": limit, "offset": offset, "count": len(items)}
         raise
 
@@ -262,7 +266,7 @@ def _queue_fallback(*, relation: str, limit: int, offset: int) -> list[dict[str,
     return merged
 
 
-def _enrich_ready_to_publish_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _enrich_selected_comment_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if not items:
         return items
 
@@ -548,11 +552,7 @@ def read_ready_to_publish(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> dict[str, Any]:
-    payload = _queue_response("v_ready_to_publish", limit=limit, offset=offset)
-    items = payload.get("items", [])
-    if isinstance(items, list):
-        payload["items"] = _enrich_ready_to_publish_items(items)
-    return payload
+    return _queue_response("v_ready_to_publish", limit=limit, offset=offset)
 
 
 @app.post("/v1/extension/tasks/{content_id}/status", dependencies=[Depends(_require_auth)])

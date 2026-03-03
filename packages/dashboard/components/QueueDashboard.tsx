@@ -60,6 +60,14 @@ function columnLabel(column: string): string {
   return column;
 }
 
+function selectedDraftText(row: Record<string, unknown>): string {
+  const selectedComment =
+    row.selected_comment && typeof row.selected_comment === 'object'
+      ? (row.selected_comment as Record<string, unknown>)
+      : null;
+  return typeof selectedComment?.draft_text === 'string' ? selectedComment.draft_text : '';
+}
+
 function formatDateTime(value: unknown): string {
   if (typeof value !== 'string' || !value) return '';
   const parsed = new Date(value);
@@ -431,6 +439,7 @@ export default function QueueDashboard() {
   const selectedOutboundUrl = selectedRawPayload.outbound_url;
   const selectedAgentSummary =
     typeof selectedRow?.agent_summary === 'string' ? selectedRow.agent_summary : '';
+  const selectedGeneratedComment = selectedRow ? selectedDraftText(selectedRow) : '';
 
   const reviewAction =
     selectedState === 'ingested'
@@ -996,10 +1005,10 @@ export default function QueueDashboard() {
                       </a>
                     )}
                     {reviewAction && (
-                      <div className="mt-3 flex flex-wrap gap-2">
+                        <div className="mt-3 flex flex-wrap gap-2">
                         {reviewAction.actions.map((actionConfig) => (
                           <button
-                            key={actionConfig.action}
+                            key={actionConfig.targetState}
                             type="button"
                             onClick={() => {
                               void runReviewAction(actionConfig);
@@ -1038,6 +1047,16 @@ export default function QueueDashboard() {
                         </p>
                         <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-[#5f4b00]">
                           {selectedAgentSummary}
+                        </p>
+                      </div>
+                    )}
+                    {selectedGeneratedComment && (
+                      <div className="mt-3 max-w-3xl rounded-2xl border border-[#a7d8b4] bg-[#e7f8eb] px-4 py-3">
+                        <p className="text-xs font-bold uppercase tracking-wide text-[#2e6a39]">
+                          Generated Comment
+                        </p>
+                        <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-[#1f5b2c]">
+                          {selectedGeneratedComment}
                         </p>
                       </div>
                     )}

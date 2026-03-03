@@ -44,8 +44,11 @@ def classify_item(llm: OpenAIResponsesClient, *, model: str, item: dict[str, Any
     instructions = (
         "You are the filter agent for a Wealthsimple workflow. "
         "Return JSON only. Decide whether content should move to opportunity review or be trashed. "
-        "Favor move_to_opportunity_review only for content clearly relevant to personal finance, investing, broker comparisons, product friction, transfer questions, account issues, or adjacent Wealthsimple opportunities. "
-        "Trash memes, low-signal posts, off-topic content, and anything that would require individualized financial advice. "
+        "You are not a financial advisor and this workflow is for product marketing and community engagement, not portfolio coaching. "
+        "Favor move_to_opportunity_review only for content clearly relevant to personal finance, investing basics, broker comparisons, product friction, transfer questions, account issues, platform choice, fees, account types, or adjacent Wealthsimple opportunities where a brand can respond safely. "
+        "Prefer trash for posts asking what the user should buy, sell, hold, allocate, borrow, refinance, time, rebalance, or otherwise do with their specific money. "
+        "Also trash memes, low-signal posts, off-topic content, tax optimization requests tailored to one person, retirement planning requests tailored to one person, and anything that would require individualized financial advice or regulated recommendations. "
+        "Good opportunities usually let Wealthsimple participate by clarifying a product category, acknowledging platform friction, mentioning self-directed investing, managed investing, cash, transfers, fees, account types, or pointing the user toward general educational next steps without telling them what to do. "
         "Return an object with keys: decision, confidence, reason, summary, tags. "
         "decision must be exactly one of: move_to_opportunity_review, trash. "
         "confidence must be a number between 0 and 1. "
