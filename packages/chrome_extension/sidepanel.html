@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WS Side Panel</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <p class="eyebrow">TheCopilotMarketer</p>
+        <h1>Ready Queue</h1>
+        <p class="subhead">Keep this panel open while reviewing a post. Load up to 5 ready-to-publish items, open one, and autofill without posting automatically.</p>
+      </header>
+
+      <section class="card">
+        <label class="field" for="apiKey">DB API key</label>
+        <input id="apiKey" type="password" placeholder="Paste DB API key" />
+        <div class="actions two-up">
+          <button id="saveApiKeyButton" type="button" class="secondary">Save API Key</button>
+          <button id="loadQueueButton" type="button">Fetch 5 Items</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="row">
+          <h2>Queue</h2>
+          <button id="clearQueueButton" type="button" class="ghost">Clear Local</button>
+        </div>
+        <div id="queueList" class="queue-list"></div>
+      </section>
+
+      <p id="status" class="status" aria-live="polite"></p>
+    </main>
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

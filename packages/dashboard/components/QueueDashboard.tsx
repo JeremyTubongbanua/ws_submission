@@ -490,11 +490,21 @@ export default function QueueDashboard() {
     <main className="min-h-screen px-4 py-6 md:px-8 lg:px-12">
       <section className="mx-auto max-w-7xl">
         <header className="mb-6 rounded-2xl border border-black/10 bg-shell p-6 shadow-card">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-tide">TheCopilotMarketer</p>
-          <h1 className="mt-2 text-3xl font-bold md:text-4xl">Marketing Copilot Dashboard</h1>
-          <p className="mt-2 text-sm text-ink/70">
-            Review social opportunities, inspect conversation context, and hand work off to automation.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-tide">TheCopilotMarketer</p>
+              <h1 className="mt-2 text-3xl font-bold md:text-4xl">Marketing Copilot Dashboard</h1>
+              <p className="mt-2 text-sm text-ink/70">
+                Review social opportunities, inspect conversation context, and hand work off to automation.
+              </p>
+            </div>
+            <a
+              href="/install-extension"
+              className="rounded-full border border-tide bg-tide px-4 py-2 text-sm font-semibold text-white hover:bg-[#095249]"
+            >
+              Install Chrome Extension
+            </a>
+          </div>
         </header>
 
         <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-card">

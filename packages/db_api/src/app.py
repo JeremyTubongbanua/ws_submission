@@ -183,6 +183,51 @@ def _queue_fallback(*, relation: str, limit: int, offset: int) -> list[dict[str,
     return merged
 
 
+def _enrich_ready_to_publish_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not items:
+        return items
+
+    content_ids = [str(item.get("id")) for item in items if item.get("id")]
+    if not content_ids:
+        return items
+
+    filters = {
+        "content_id": f"in.({','.join(content_ids)})",
+        "is_selected": "eq.true",
+    }
+    selected_comments = client.list_rows(
+        "generated_comments",
+        limit=max(len(content_ids), 50),
+        offset=0,
+        filters=filters,
+    )
+    selected_by_content_id = {
+        str(comment.get("content_id")): comment
+        for comment in selected_comments
+        if comment.get("content_id")
+    }
+
+    enriched: list[dict[str, Any]] = []
+    for item in items:
+        selected_comment = selected_by_content_id.get(str(item.get("id")))
+        enriched.append(
+            {
+                **item,
+                "selected_comment": (
+                    {
+                        "id": selected_comment.get("id"),
+                        "draft_text": selected_comment.get("draft_text"),
+                        "model_name": selected_comment.get("model_name"),
+                        "prompt_version": selected_comment.get("prompt_version"),
+                    }
+                    if selected_comment
+                    else None
+                ),
+            }
+        )
+    return enriched
+
+
 @app.exception_handler(SupabaseAPIError)
 def _handle_supabase_error(_: Any, exc: SupabaseAPIError) -> JSONResponse:
     detail = "Upstream database error"
@@ -508,7 +553,11 @@ def read_ready_to_publish(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> dict[str, Any]:
-    return _queue_response("v_ready_to_publish", limit=limit, offset=offset)
+    payload = _queue_response("v_ready_to_publish", limit=limit, offset=offset)
+    items = payload.get("items", [])
+    if isinstance(items, list):
+        payload["items"] = _enrich_ready_to_publish_items(items)
+    return payload
 
 
 @app.post("/v1/extension/tasks/{content_id}/status", dependencies=[Depends(_require_auth)])

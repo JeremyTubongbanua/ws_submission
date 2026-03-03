@@ -5,6 +5,7 @@
   "description": "Fills the active comment box with prepared text.",
   "permissions": [
     "activeTab",
+    "sidePanel",
     "storage",
     "tabs"
   ],
@@ -22,8 +23,13 @@
     }
   ],
   "action": {
-    "default_title": "WS Comment Filler",
-    "default_popup": "popup.html"
+    "default_title": "WS Comment Filler"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
   },
   "content_scripts": [
     {
