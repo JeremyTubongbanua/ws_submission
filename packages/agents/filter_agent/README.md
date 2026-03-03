@@ -73,3 +73,53 @@ Suggested files when implemented:
 - `src/prompt.md`
 - `src/models.py`
 - `src/eval_cases.json`
+
+## Current implementation
+
+This agent is now runnable at [src/main.py](/Users/jeremytubongbanua/GitHub/ws_submission/packages/agents/filter_agent/src/main.py).
+
+It:
+
+- reads `GET /v1/queues/ingested`
+- sends each item to OpenAI for JSON classification
+- posts decisions to `POST /v1/queues/ingested/{content_id}/classify`
+
+## How to run
+
+From the repo root:
+
+```bash
+cd packages/agents/filter_agent
+uv run python src/main.py --once
+```
+
+Default behavior:
+
+- `--once`: one cycle
+- no flag: up to 5 cycles
+- `--run-forever`: continuous polling
+
+## API mode
+
+This agent also exposes a manual control API on port `8002`.
+
+Run it with:
+
+```bash
+packages/agents/filter_agent/tools/run_filter_agent_api.sh
+```
+
+Endpoints:
+
+- `GET /health`
+- `POST /run`
+
+Example:
+
+```bash
+curl -s -X POST http://127.0.0.1:8002/run \
+  -H "Content-Type: application/json" \
+  -d '{"cycles": 5, "limit": 1}'
+```
+
+In manual API mode, `cycles=5` and `limit=1` means the filter agent will process at most 5 items total.

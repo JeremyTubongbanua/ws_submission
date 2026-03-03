@@ -70,11 +70,45 @@ cd packages/scraper_daemon
 uv run python src/reddit_scraper.py
 ```
 
+By default, daemon mode stops after 5 scrape cycles.
+
+Run indefinitely only when you explicitly opt in:
+
+```bash
+cd packages/scraper_daemon
+uv run python src/reddit_scraper.py --run-forever
+```
+
 Or use the helper script:
 
 ```bash
 packages/scraper_daemon/tools/run_scraper.sh
 ```
+
+## API mode
+
+The scraper daemon also exposes a manual control API on port `8001`.
+
+Run it with:
+
+```bash
+packages/scraper_daemon/tools/run_scraper_api.sh
+```
+
+Endpoints:
+
+- `GET /health`
+- `POST /run`
+
+Example:
+
+```bash
+curl -s -X POST http://127.0.0.1:8001/run \
+  -H "Content-Type: application/json" \
+  -d '{"cycles": 5, "limit": 1}'
+```
+
+In manual API mode, `cycles=5` and `limit=1` means the scraper will ingest at most 5 posts total.
 
 ## Output
 

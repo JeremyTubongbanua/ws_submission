@@ -1,0 +1,26 @@
+
+> dashboard@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.5
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 1008ms
+ ✓ Compiled / in 327ms (449 modules)
+ GET / 200 in 408ms
+ ✓ Compiled /api/view/[view] in 31ms (255 modules)
+ GET / 200 in 32ms
+ GET /api/view/ingested?limit=100&offset=0 200 in 207ms
+ GET /api/view/ingested?limit=100&offset=0 200 in 1330ms
+ GET /api/view/ingested?limit=100&offset=0 200 in 634ms
+ ✓ Compiled /api/agents/[agent]/run in 71ms (257 modules)
+ GET / 200 in 31ms
+ POST /api/agents/scraper_daemon/run 200 in 31584ms
+ GET /api/view/ingested?limit=100&offset=0 200 in 658ms
+ GET /api/view/ingested?limit=100&offset=0 200 in 688ms
+ GET / 200 in 24ms
+ GET /api/view/ingested?limit=100&offset=0 200 in 702ms
+ GET /api/view/ingested?limit=100&offset=0 200 in 700ms
+[?25h

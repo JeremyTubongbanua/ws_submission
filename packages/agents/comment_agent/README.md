@@ -76,3 +76,53 @@ Suggested files when implemented:
 - `src/policies.md`
 - `src/models.py`
 - `src/examples.json`
+
+## Current implementation
+
+This agent is now runnable at [src/main.py](/Users/jeremytubongbanua/GitHub/ws_submission/packages/agents/comment_agent/src/main.py).
+
+It:
+
+- reads `GET /v1/queues/drafting`
+- sends each item to OpenAI for JSON draft generation
+- posts results to `POST /v1/queues/drafting/{content_id}/generate-comment`
+
+## How to run
+
+From the repo root:
+
+```bash
+cd packages/agents/comment_agent
+uv run python src/main.py --once
+```
+
+Default behavior:
+
+- `--once`: one cycle
+- no flag: up to 5 cycles
+- `--run-forever`: continuous polling
+
+## API mode
+
+This agent also exposes a manual control API on port `8003`.
+
+Run it with:
+
+```bash
+packages/agents/comment_agent/tools/run_comment_agent_api.sh
+```
+
+Endpoints:
+
+- `GET /health`
+- `POST /run`
+
+Example:
+
+```bash
+curl -s -X POST http://127.0.0.1:8003/run \
+  -H "Content-Type: application/json" \
+  -d '{"cycles": 5, "limit": 1}'
+```
+
+In manual API mode, `cycles=5` and `limit=1` means the comment agent will process at most 5 items total.

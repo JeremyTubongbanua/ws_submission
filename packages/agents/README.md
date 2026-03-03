@@ -37,4 +37,60 @@ Each agent package can eventually contain:
 - `src/models.py`
 - `.env`
 
-This commit only creates the documentation scaffolding.
+## Current implementation
+
+The repository now includes runnable worker entry points for:
+
+- `filter_agent`
+- `comment_agent`
+- `triage_manager`
+
+Shared runtime code lives in [shared_utils.py](/Users/jeremytubongbanua/GitHub/ws_submission/packages/agents/shared_utils.py).
+
+## Shared environment
+
+The agents read `packages/agents/.env`.
+
+Current required values:
+
+- `OPENAI_API_KEY`
+
+Useful optional values:
+
+- `DB_API_BASE_URL`
+- `DB_API_SERVICE_TOKEN`
+- `AGENT_POLL_INTERVAL_SECONDS`
+- `AGENT_REQUEST_TIMEOUT_SECONDS`
+- `FILTER_AGENT_MODEL`
+- `COMMENT_AGENT_MODEL`
+
+If `DB_API_SERVICE_TOKEN` is not set in `packages/agents/.env`, the agents also fall back to `packages/db_api/.env`.
+
+## Runtime behavior
+
+All agents support the same loop flags:
+
+- `--once`: run one cycle
+- default: run up to 5 cycles
+- `--run-forever`: run indefinitely
+
+They also support:
+
+- `--interval-seconds`
+- `--limit`
+
+## Manual control APIs
+
+The agents are also intended to run as local FastAPI services so the frontend can trigger bounded runs manually.
+
+Default local ports:
+
+- filter agent API: `8002`
+- comment agent API: `8003`
+
+Service endpoints:
+
+- `GET /health`
+- `POST /run`
+
+The dashboard should call these services instead of expecting the agents to poll forever on their own.

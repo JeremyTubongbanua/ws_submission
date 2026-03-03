@@ -266,7 +266,7 @@ def ingest_post(config: ScraperConfig, payload: dict[str, Any]) -> dict[str, Any
     )
 
 
-def run_once(config: ScraperConfig) -> dict[str, int]:
+def run_once(config: ScraperConfig, *, max_items: int | None = None) -> dict[str, int]:
     stats = {
         "subreddits_checked": 0,
         "posts_seen": 0,
@@ -274,6 +274,7 @@ def run_once(config: ScraperConfig) -> dict[str, int]:
         "duplicates": 0,
         "errors": 0,
     }
+    processed_items = 0
 
     posts_by_subreddit: dict[str, list[dict[str, Any]]] = {}
 
@@ -288,10 +289,13 @@ def run_once(config: ScraperConfig) -> dict[str, int]:
 
     for round_posts in zip_longest(*(posts_by_subreddit[subreddit] for subreddit in config.subreddits)):
         for subreddit, post in zip(config.subreddits, round_posts):
+            if max_items is not None and processed_items >= max_items:
+                return stats
             if post is None:
                 continue
 
             stats["posts_seen"] += 1
+            processed_items += 1
             payload = reddit_post_to_ingest_payload(config, post)
             if not payload.get("source_content_id") or not payload.get("source_url"):
                 stats["errors"] += 1
@@ -339,6 +343,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Override the polling interval for daemon mode.",
     )
+    parser.add_argument(
+        "--run-forever",
+        action="store_true",
+        help="Run indefinitely instead of stopping after the default maximum number of cycles.",
+    )
     return parser.parse_args()
 
 
@@ -358,9 +367,17 @@ def main() -> int:
         return 0
 
     interval_seconds = args.interval_seconds or config.poll_interval_seconds
-    while True:
+    max_cycles = None if args.run_forever else 5
+    cycles_completed = 0
+
+    while max_cycles is None or cycles_completed < max_cycles:
         print_stats(run_once(config))
+        cycles_completed += 1
+        if max_cycles is not None and cycles_completed >= max_cycles:
+            break
         time.sleep(interval_seconds)
+
+    return 0
 
 
 if __name__ == "__main__":

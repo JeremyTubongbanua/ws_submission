@@ -1,0 +1,83 @@
+   Building scraper-daemon @ file:///Users/jeremytubongbanua/GitHub/ws_submission/packages/scraper_daemon
+      Built scraper-daemon @ file:///Users/jeremytubongbanua/GitHub/ws_submission/packages/scraper_daemon
+Uninstalled 1 package in 0.72ms
+Installed 14 packages in 7ms
+INFO:     Will watch for changes in these directories: ['/Users/jeremytubongbanua/GitHub/ws_submission/packages/scraper_daemon']
+INFO:     Uvicorn running on http://127.0.0.1:8001 (Press CTRL+C to quit)
+INFO:     Started reloader process [23220] using StatReload
+INFO:     Started server process [23226]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Shutting down
+INFO:     Waiting for background tasks to complete. (CTRL+C to force quit)
+[error] ingest t3_1rfnu4i: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rj23h6: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1ri53nc: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rj7wlt: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rfj5so: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rj1yi5: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1ri37gs: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rj7qsj: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rf2j61: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rj1l7z: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1ri2fsd: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rj7n3g: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1remo9s: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rj0nzc: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1ri0i9q: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rj7fx2: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rei1ky: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rj0215: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rhyl9a: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rj7f5y: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rdyy4l: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rizyi7: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rhkfap: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rj7b8i: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rdunky: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1riz9ma: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rhk7uv: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rj7ai8: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rdoz2x: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1riz0f1: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rhcy04: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rj7afd: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rdo6fr: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1riyrtn: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rhb51h: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rj6nyj: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rdly3u: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1riyf2z: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rh72w2: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rj6hg3: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rcy6lg: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rixphk: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rh4tt2: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rj68nh: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rcxpjc: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1riwhbh: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rgx5sr: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rj5zqr: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rchpn6: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rivz4k: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] ingest t3_1rgw17h: Network error for http://127.0.0.1:8000/v1/content/ingest: [Errno 61] Connection refused
+[error] fetch r/PersonalFinanceCanada: HTTP 429 for https://www.reddit.com/r/PersonalFinanceCanada/new.json?limit=25&raw_json=1: 
+[error] fetch r/Questrade: HTTP 429 for https://www.reddit.com/r/Questrade/new.json?limit=25&raw_json=1: 
+[error] fetch r/Wealthsimple: HTTP 429 for https://www.reddit.com/r/Wealthsimple/new.json?limit=25&raw_json=1: 
+[error] fetch r/JustBuyXEQT: HTTP 429 for https://www.reddit.com/r/JustBuyXEQT/new.json?limit=25&raw_json=1: 
+[error] fetch r/PersonalFinanceCanada: HTTP 429 for https://www.reddit.com/r/PersonalFinanceCanada/new.json?limit=25&raw_json=1: 
+[error] fetch r/Questrade: HTTP 429 for https://www.reddit.com/r/Questrade/new.json?limit=25&raw_json=1: 
+[error] fetch r/Wealthsimple: HTTP 429 for https://www.reddit.com/r/Wealthsimple/new.json?limit=25&raw_json=1: 
+[error] fetch r/JustBuyXEQT: HTTP 429 for https://www.reddit.com/r/JustBuyXEQT/new.json?limit=25&raw_json=1: 
+[error] fetch r/PersonalFinanceCanada: HTTP 429 for https://www.reddit.com/r/PersonalFinanceCanada/new.json?limit=25&raw_json=1: 
+[error] fetch r/Questrade: HTTP 429 for https://www.reddit.com/r/Questrade/new.json?limit=25&raw_json=1: 
+[error] fetch r/Wealthsimple: HTTP 429 for https://www.reddit.com/r/Wealthsimple/new.json?limit=25&raw_json=1: 
+[error] fetch r/JustBuyXEQT: HTTP 429 for https://www.reddit.com/r/JustBuyXEQT/new.json?limit=25&raw_json=1: 
+[error] fetch r/PersonalFinanceCanada: HTTP 429 for https://www.reddit.com/r/PersonalFinanceCanada/new.json?limit=25&raw_json=1: 
+[error] fetch r/Questrade: HTTP 429 for https://www.reddit.com/r/Questrade/new.json?limit=25&raw_json=1: 
+[error] fetch r/Wealthsimple: HTTP 429 for https://www.reddit.com/r/Wealthsimple/new.json?limit=25&raw_json=1: 
+[error] fetch r/JustBuyXEQT: HTTP 429 for https://www.reddit.com/r/JustBuyXEQT/new.json?limit=25&raw_json=1: 
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [23226]
+INFO:     Stopping reloader process [23220]

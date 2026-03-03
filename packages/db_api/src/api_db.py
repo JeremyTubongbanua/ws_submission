@@ -108,11 +108,12 @@ class SupabaseClient:
         raise SupabaseAPIError("Insert returned empty payload", status_code=502)
 
     def insert_many(self, table: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        normalized_rows = _normalize_rows(rows)
         payload = self._request(
             "POST",
             table,
             params={"select": "*"},
-            body=rows,
+            body=normalized_rows,
             extra_headers={"Prefer": "return=representation"},
         )
         if isinstance(payload, list):
@@ -120,12 +121,6 @@ class SupabaseClient:
         if isinstance(payload, dict):
             return [payload]
         return []
-
-
-def _json_default(value: Any) -> Any:
-    if isinstance(value, (datetime, date)):
-        return value.isoformat()
-    raise TypeError(f"Object of type {value.__class__.__name__} is not JSON serializable")
 
     def update_rows(
         self,
@@ -146,3 +141,20 @@ def _json_default(value: Any) -> Any:
         if isinstance(payload, dict):
             return [payload]
         return []
+
+
+def _json_default(value: Any) -> Any:
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    raise TypeError(f"Object of type {value.__class__.__name__} is not JSON serializable")
+
+
+def _normalize_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if not rows:
+        return rows
+
+    keys: set[str] = set()
+    for row in rows:
+        keys.update(row.keys())
+
+    return [{key: row.get(key) for key in keys} for row in rows]

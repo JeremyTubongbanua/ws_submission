@@ -77,3 +77,30 @@ Suggested files when implemented:
 - `src/client.py`
 - `src/models.py`
 - `src/config.py`
+
+## Current implementation
+
+This agent is now runnable at [src/main.py](/Users/jeremytubongbanua/GitHub/ws_submission/packages/agents/triage_manager/src/main.py).
+
+Current behavior is intentionally read-only because the DB API does not yet expose the transition endpoints this agent would need for real automation.
+
+It currently:
+
+- reads queue view counts
+- prints queue summaries as JSON
+- does not move items between states
+
+## How to run
+
+From the repo root:
+
+```bash
+cd packages/agents/triage_manager
+uv run python src/main.py --once
+```
+
+Default behavior:
+
+- `--once`: one cycle
+- no flag: up to 5 cycles
+- `--run-forever`: continuous polling

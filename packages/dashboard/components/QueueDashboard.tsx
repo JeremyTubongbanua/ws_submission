@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { QueueResponse, QueueView } from '@/lib/types';
 import { QUEUE_VIEWS } from '@/lib/types';
+import { ACTORS, type ActorId, type ActorRunResponse } from '@/lib/actors';
 
 const fetcher = async (url: string): Promise<QueueResponse> => {
   const response = await fetch(url);
@@ -26,6 +27,40 @@ export default function QueueDashboard() {
   const [data, setData] = useState<QueueResponse | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [actorLoading, setActorLoading] = useState<Record<string, boolean>>({});
+  const [actorResults, setActorResults] = useState<Record<string, ActorRunResponse | { detail: string }>>({});
+  const [actorCycles, setActorCycles] = useState<Record<string, number>>({
+    scraper_daemon: 5,
+    filter_agent: 5,
+    comment_agent: 5,
+  });
+
+  const runActor = async (actor: ActorId) => {
+    setActorLoading((current) => ({ ...current, [actor]: true }));
+    const cycles = Math.max(1, Math.min(5, Number(actorCycles[actor] || 1)));
+    try {
+      const response = await fetch(`/api/agents/${actor}/run`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ cycles, limit: 1 }),
+      });
+      const payload = await response.json();
+      setActorResults((current) => ({ ...current, [actor]: payload }));
+      if (!response.ok) {
+        throw new Error(payload.detail || `Failed (${response.status})`);
+      }
+      await load();
+    } catch (err) {
+      setActorResults((current) => ({
+        ...current,
+        [actor]: { detail: String(err) },
+      }));
+    } finally {
+      setActorLoading((current) => ({ ...current, [actor]: false }));
+    }
+  };
 
   const load = async () => {
     setIsLoading(true);
@@ -63,6 +98,53 @@ export default function QueueDashboard() {
             Browse pipeline queues, inspect records, and hand off work to automation.
           </p>
         </header>
+
+        <section className="mb-6 rounded-2xl border border-black/10 bg-white p-4 shadow-card">
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold">Agent Controls</h2>
+              <p className="text-sm text-ink/70">Run each agent manually for up to 5 cycles.</p>
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {ACTORS.map((actor) => (
+              <article key={actor.id} className="rounded-2xl border border-black/10 bg-[#fcfbf8] p-4">
+                <h3 className="font-semibold">{actor.label}</h3>
+                <p className="mt-1 text-sm text-ink/70">{actor.description}</p>
+                <label className="mt-4 block text-xs font-bold uppercase tracking-wide text-ink/60">
+                  Cycles
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={5}
+                  value={actorCycles[actor.id] ?? 5}
+                  onChange={(event) => {
+                    const nextValue = Number(event.target.value);
+                    setActorCycles((current) => ({
+                      ...current,
+                      [actor.id]: Number.isFinite(nextValue) ? nextValue : 1,
+                    }));
+                  }}
+                  className="mt-2 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-ink"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    void runActor(actor.id);
+                  }}
+                  disabled={Boolean(actorLoading[actor.id])}
+                  className="mt-4 rounded-full border border-tide bg-tide px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {actorLoading[actor.id] ? 'Running...' : 'Run Cycles'}
+                </button>
+                <pre className="mt-3 max-h-48 overflow-auto rounded-xl bg-[#0f1820] p-3 text-xs text-[#d8fff7]">
+                  {JSON.stringify(actorResults[actor.id] ?? { status: 'idle' }, null, 2)}
+                </pre>
+              </article>
+            ))}
+          </div>
+        </section>
 
         <div className="mb-5 flex flex-wrap gap-2">
           {QUEUE_VIEWS.map((view) => {
