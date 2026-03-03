@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
@@ -94,8 +95,10 @@ def _to_eq(value: str) -> str:
 
 def _to_payload(model: BaseModel) -> dict[str, Any]:
     if hasattr(model, "model_dump"):
-        return model.model_dump(exclude_none=True)  # pydantic v2
-    return model.dict(exclude_none=True)  # pydantic v1
+        return model.model_dump(mode="json", exclude_none=True)  # pydantic v2
+    if hasattr(model, "json"):
+        return json.loads(model.json(exclude_none=True))  # pydantic v1
+    return model.dict(exclude_none=True)  # fallback
 
 
 def _require_auth(x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> None:

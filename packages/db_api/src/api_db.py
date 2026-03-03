@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime
 from dataclasses import dataclass
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -43,7 +44,7 @@ class SupabaseClient:
         data: bytes | None = None
         if body is not None:
             headers["Content-Type"] = "application/json"
-            data = json.dumps(body).encode("utf-8")
+            data = json.dumps(body, default=_json_default).encode("utf-8")
 
         request = Request(url=url, method=method, headers=headers, data=data)
         try:
@@ -119,6 +120,12 @@ class SupabaseClient:
         if isinstance(payload, dict):
             return [payload]
         return []
+
+
+def _json_default(value: Any) -> Any:
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    raise TypeError(f"Object of type {value.__class__.__name__} is not JSON serializable")
 
     def update_rows(
         self,
