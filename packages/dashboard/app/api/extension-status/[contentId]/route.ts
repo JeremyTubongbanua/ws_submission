@@ -4,7 +4,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { contentId: string } },
 ) {
-  const baseUrl = process.env.NEXT_PUBLIC_DB_API_BASE_URL || 'http://127.0.0.1:8000';
+  const baseUrl = process.env.DB_API_BASE_URL || 'http://127.0.0.1:8000';
   const token = process.env.DB_API_SERVICE_TOKEN;
   if (!token) {
     return NextResponse.json(

@@ -1,9 +1,22 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import type { QueueResponse, QueueView } from '@/lib/types';
 import { QUEUE_VIEWS } from '@/lib/types';
 import { ACTORS, type ActorId, type ActorRunResponse } from '@/lib/actors';
+
+const DEFAULT_VISIBLE_COLUMNS = new Set([
+  'state',
+  'title',
+  'upvotes',
+  'source',
+  'source_author',
+  'source_url',
+  'source_created_at',
+  'last_transition_at',
+]);
+
+type SortDirection = 'asc' | 'desc';
 
 const fetcher = async (url: string): Promise<QueueResponse> => {
   const response = await fetch(url);
@@ -14,11 +27,76 @@ const fetcher = async (url: string): Promise<QueueResponse> => {
   return response.json();
 };
 
+const EASTERN_DATETIME_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  month: 'long',
+  day: 'numeric',
+  year: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+});
+
 function label(view: QueueView): string {
   return view
     .split('_')
     .map((piece) => piece.charAt(0).toUpperCase() + piece.slice(1))
     .join(' ');
+}
+
+function columnLabel(column: string): string {
+  if (column === 'source_created_at') return 'Posted On';
+  if (column === 'upvotes') return 'Upvotes';
+  return column;
+}
+
+function formatDateTime(value: unknown): string {
+  if (typeof value !== 'string' || !value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return `${EASTERN_DATETIME_FORMATTER.format(parsed)} (Eastern Time)`;
+}
+
+function formatCellValue(column: string, value: unknown): string {
+  if (column === 'upvotes') {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? String(numeric) : '';
+  }
+  if (value == null) return '';
+  if (column.endsWith('_at') || column === 'source_created_at') {
+    return formatDateTime(value);
+  }
+  return String(value);
+}
+
+function upvoteCount(row: Record<string, unknown>): number {
+  const rawPayload =
+    row.raw_payload && typeof row.raw_payload === 'object'
+      ? (row.raw_payload as Record<string, unknown>)
+      : {};
+  const score = rawPayload.score;
+  const numeric = Number(score);
+  return Number.isFinite(numeric) ? numeric : -Infinity;
+}
+
+function sortableValue(row: Record<string, unknown>, column: string): string | number {
+  if (column === 'upvotes' || column === 'score') {
+    return upvoteCount(row);
+  }
+
+  const value = row[column];
+  if (column.endsWith('_at') || column === 'source_created_at') {
+    if (typeof value === 'string') {
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? value.toLowerCase() : parsed.getTime();
+    }
+    return 0;
+  }
+
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string') return value.toLowerCase();
+  if (typeof value === 'boolean') return value ? 1 : 0;
+  return String(value ?? '').toLowerCase();
 }
 
 export default function QueueDashboard() {
@@ -34,6 +112,16 @@ export default function QueueDashboard() {
     filter_agent: 5,
     comment_agent: 5,
   });
+  const [reviewActionLoading, setReviewActionLoading] = useState<boolean>(false);
+  const [reviewActionResult, setReviewActionResult] = useState<Record<string, unknown> | null>(null);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({});
+  const [sortState, setSortState] = useState<{ column: string; direction: SortDirection } | null>(null);
+  const resizeStateRef = useRef<{
+    column: string;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
 
   const runActor = async (actor: ActorId) => {
     setActorLoading((current) => ({ ...current, [actor]: true }));
@@ -79,14 +167,211 @@ export default function QueueDashboard() {
     void load();
   }, [selected]);
 
-  const columns = useMemo(() => {
+  const columns = (() => {
     if (!data?.items.length) return [];
     const keys = new Set<string>();
     for (const row of data.items) {
       Object.keys(row).forEach((key) => keys.add(key));
     }
+    keys.add('upvotes');
     return Array.from(keys);
-  }, [data]);
+  })();
+
+  useEffect(() => {
+    setVisibleColumns((current) => {
+      const next = { ...current };
+      for (const column of columns) {
+        if (!(column in next)) {
+          next[column] = DEFAULT_VISIBLE_COLUMNS.has(column);
+        }
+      }
+      return next;
+    });
+  }, [columns]);
+
+  const displayedColumns = columns.filter((column) => visibleColumns[column]);
+  const sortedItems = (() => {
+    const items = [...(data?.items ?? [])];
+    if (sortState) {
+      const { column, direction } = sortState;
+      items.sort((left, right) => {
+        const leftValue = sortableValue(left, column);
+        const rightValue = sortableValue(right, column);
+        if (leftValue < rightValue) return direction === 'asc' ? -1 : 1;
+        if (leftValue > rightValue) return direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return items;
+  })();
+
+  useEffect(() => {
+    const onMouseMove = (event: MouseEvent) => {
+      const resizeState = resizeStateRef.current;
+      if (!resizeState) return;
+
+      const delta = event.clientX - resizeState.startX;
+      const nextWidth = Math.max(120, resizeState.startWidth + delta);
+      setColumnWidths((current) => ({
+        ...current,
+        [resizeState.column]: nextWidth,
+      }));
+    };
+
+    const onMouseUp = () => {
+      resizeStateRef.current = null;
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
+
+  const startResize = (event: ReactMouseEvent<HTMLSpanElement>, column: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const currentWidth =
+      columnWidths[column] ??
+      Math.max(160, Math.min(320, `${column}`.length * 12 + 48));
+
+    resizeStateRef.current = {
+      column,
+      startX: event.clientX,
+      startWidth: currentWidth,
+    };
+  };
+
+  const selectedState = String(selectedRow?.state ?? '');
+  const selectedId = String(selectedRow?.id ?? '');
+  const selectedUrl = typeof selectedRow?.source_url === 'string' ? selectedRow.source_url : null;
+  const selectedTitle = typeof selectedRow?.title === 'string' ? selectedRow.title : '';
+  const selectedBody = typeof selectedRow?.body_text === 'string' ? selectedRow.body_text : '';
+  const selectedAuthor = typeof selectedRow?.source_author === 'string' ? selectedRow.source_author : '';
+  const selectedRawPayload =
+    selectedRow?.raw_payload && typeof selectedRow.raw_payload === 'object'
+      ? (selectedRow.raw_payload as Record<string, unknown>)
+      : {};
+  const selectedSubreddit =
+    typeof selectedRawPayload.subreddit === 'string' ? selectedRawPayload.subreddit : '';
+  const selectedScore =
+    typeof selectedRawPayload.score === 'number' || typeof selectedRawPayload.score === 'string'
+      ? String(selectedRawPayload.score)
+      : '';
+  const selectedNumComments =
+    typeof selectedRawPayload.num_comments === 'number' ||
+    typeof selectedRawPayload.num_comments === 'string'
+      ? String(selectedRawPayload.num_comments)
+      : '';
+  const selectedComments = Array.isArray(selectedRawPayload.top_level_comments)
+    ? selectedRawPayload.top_level_comments.slice(0, 5)
+    : [];
+  const selectedPostedOn = formatDateTime(selectedRow?.source_created_at);
+  const selectedIndex = sortedItems.findIndex((row) => String(row.id ?? '') === selectedId);
+
+  const reviewAction =
+    selectedState === 'ingested'
+      ? {
+          actions: [
+            {
+              action: 'move_ingested_to_opportunity_review' as const,
+              label: 'Move To Opportunity Review',
+              nextState: 'opportunity_review',
+            },
+            {
+              action: 'move_ingested_to_drafting' as const,
+              label: 'Move Directly To Drafting Queue',
+              nextState: 'drafting_queue',
+            },
+          ],
+        }
+      : selectedState === 'opportunity_review'
+      ? {
+          actions: [
+            {
+              action: 'move_to_drafting' as const,
+              label: 'Move To Drafting Queue',
+              nextState: 'drafting_queue',
+            },
+          ],
+        }
+      : selectedState === 'approval_review'
+        ? {
+            actions: [
+              {
+                action: 'move_to_ready' as const,
+                label: 'Move To Ready To Publish',
+                nextState: 'ready_to_publish',
+              },
+            ],
+          }
+        : null;
+
+  const runReviewAction = async (actionConfig: {
+    action:
+      | 'move_ingested_to_opportunity_review'
+      | 'move_ingested_to_drafting'
+      | 'move_to_drafting'
+      | 'move_to_ready';
+    nextState: string;
+  }) => {
+    if (!selectedId) return;
+
+    setReviewActionLoading(true);
+    setReviewActionResult(null);
+    try {
+      const response = await fetch('/api/review-action', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: actionConfig.action,
+          contentId: selectedId,
+        }),
+      });
+      const payload = await response.json();
+      setReviewActionResult(payload);
+      if (!response.ok) {
+        throw new Error(payload.detail || `Failed (${response.status})`);
+      }
+      setSelectedRow((current) =>
+        current
+          ? {
+              ...current,
+              state: actionConfig.nextState,
+            }
+          : current,
+      );
+      await load();
+    } catch (err) {
+      setReviewActionResult({ detail: String(err) });
+    } finally {
+      setReviewActionLoading(false);
+    }
+  };
+
+  const selectRelativeRow = (direction: -1 | 1) => {
+    if (selectedIndex < 0) return;
+    const nextIndex = selectedIndex + direction;
+    if (nextIndex < 0 || nextIndex >= sortedItems.length) return;
+    setSelectedRow(sortedItems[nextIndex]);
+  };
+
+  const toggleSort = (column: string) => {
+    setSortState((current) => {
+      if (!current || current.column !== column) {
+        return { column, direction: 'asc' };
+      }
+      return {
+        column,
+        direction: current.direction === 'asc' ? 'desc' : 'asc',
+      };
+    });
+  };
 
   return (
     <main className="min-h-screen px-4 py-6 md:px-8 lg:px-12">
@@ -178,11 +463,34 @@ export default function QueueDashboard() {
           </button>
         </div>
 
-        <section className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-          <article className="overflow-hidden rounded-2xl border border-black/10 bg-white shadow-card">
+        <section className="grid min-w-0 gap-4">
+          <article className="min-w-0 overflow-hidden rounded-2xl border border-black/10 bg-white shadow-card">
             <div className="flex items-center justify-between border-b border-black/10 px-4 py-3">
               <h2 className="font-semibold">{label(selected)}</h2>
               <span className="text-xs text-ink/60">{data?.count ?? 0} items</span>
+            </div>
+
+            <div className="border-b border-black/10 px-4 py-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-ink/60">Visible Columns</p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                {columns.map((column) => (
+                  <label key={column} className="flex items-center gap-2 text-sm text-ink/80">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(visibleColumns[column])}
+                      onChange={(event) => {
+                        const checked = event.target.checked;
+                        setVisibleColumns((current) => ({
+                          ...current,
+                          [column]: checked,
+                        }));
+                      }}
+                      className="h-4 w-4 rounded border-black/20"
+                    />
+                    <span>{columnLabel(column)}</span>
+                  </label>
+                ))}
+              </div>
             </div>
 
             {isLoading && <p className="p-4 text-sm text-ink/70">Loading queue...</p>}
@@ -193,23 +501,59 @@ export default function QueueDashboard() {
                 <table className="min-w-full text-sm">
                   <thead className="sticky top-0 bg-[#edf5f3] text-left">
                     <tr>
-                      {columns.map((column) => (
-                        <th key={column} className="border-b border-black/10 px-3 py-2 font-semibold">
-                          {column}
+                      {displayedColumns.map((column) => (
+                        <th
+                          key={column}
+                          className="relative border-b border-black/10 px-3 py-2 font-semibold"
+                          style={{ width: columnWidths[column] ?? undefined }}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <button
+                              type="button"
+                              onClick={() => toggleSort(column)}
+                              className="flex min-w-0 items-center gap-1 truncate text-left hover:text-tide"
+                            >
+                              <span className="truncate">{columnLabel(column)}</span>
+                              {sortState?.column === column && (
+                                <span className="text-xs text-tide">
+                                  {sortState.direction === 'asc' ? '↑' : '↓'}
+                                </span>
+                              )}
+                            </button>
+                            <span
+                              role="separator"
+                              aria-orientation="vertical"
+                              aria-label={`Resize ${column} column`}
+                              onMouseDown={(event) => startResize(event, column)}
+                              className="cursor-col-resize select-none px-1 text-ink/30 hover:text-tide"
+                            >
+                              |
+                            </span>
+                          </div>
                         </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {(data?.items ?? []).map((row, index) => (
+                    {sortedItems.map((row, index) => (
                       <tr
                         key={`${String(row.id ?? index)}-${index}`}
                         onClick={() => setSelectedRow(row)}
                         className="cursor-pointer border-b border-black/5 odd:bg-white even:bg-[#fcfbf8] hover:bg-[#e8f7f3]"
                       >
-                        {columns.map((column) => (
-                          <td key={column} className="max-w-[220px] truncate px-3 py-2 align-top">
-                            {String(row[column] ?? '')}
+                        {displayedColumns.map((column) => (
+                          <td
+                            key={column}
+                            className="truncate px-3 py-2 align-top"
+                            style={{
+                              width: columnWidths[column] ?? undefined,
+                              maxWidth: columnWidths[column] ?? 220,
+                            }}
+                          >
+                            {formatCellValue(
+                              column,
+                              column === 'upvotes' ? upvoteCount(row) : row[column],
+                            )}
                           </td>
                         ))}
                       </tr>
@@ -220,13 +564,181 @@ export default function QueueDashboard() {
             )}
           </article>
 
-          <aside className="rounded-2xl border border-black/10 bg-white p-4 shadow-card">
-            <h3 className="text-sm font-bold uppercase tracking-wide text-ink/60">Selected Item</h3>
+          <aside className="min-w-0 max-w-full overflow-hidden rounded-2xl border border-black/10 bg-white p-4 shadow-card">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-sm font-bold uppercase tracking-wide text-ink/60">Selected Item</h3>
+              {selectedRow && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => selectRelativeRow(-1)}
+                    disabled={selectedIndex <= 0}
+                    className="rounded-full border border-black/10 bg-white px-3 py-1 text-xs font-semibold text-ink disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectRelativeRow(1)}
+                    disabled={selectedIndex < 0 || selectedIndex >= sortedItems.length - 1}
+                    className="rounded-full border border-black/10 bg-white px-3 py-1 text-xs font-semibold text-ink disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
             {!selectedRow && <p className="mt-3 text-sm text-ink/70">Click a row to inspect full JSON.</p>}
             {selectedRow && (
-              <pre className="mt-3 max-h-[520px] overflow-auto rounded-xl bg-[#0f1820] p-3 text-xs text-[#d8fff7]">
-                {JSON.stringify(selectedRow, null, 2)}
-              </pre>
+              <>
+                <div className="mt-3 min-w-0 space-y-3">
+                  <div className="min-w-0 rounded-xl border border-black/10 bg-[#f7f3e8] p-3">
+                    <p className="text-xs font-bold uppercase tracking-wide text-ink/60">Human Review</p>
+                    <p className="mt-1 text-sm text-ink/80">
+                      Current state: <span className="font-semibold">{selectedState || 'unknown'}</span>
+                    </p>
+                    {selectedUrl && (
+                      <a
+                        href={selectedUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-3 inline-block text-sm font-semibold text-tide underline-offset-2 hover:underline"
+                      >
+                        Open Source Link
+                      </a>
+                    )}
+                    {reviewAction && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {reviewAction.actions.map((actionConfig) => (
+                          <button
+                            key={actionConfig.action}
+                            type="button"
+                            onClick={() => {
+                              void runReviewAction(actionConfig);
+                            }}
+                            disabled={reviewActionLoading}
+                            className="rounded-full border border-tide bg-tide px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {reviewActionLoading ? 'Submitting...' : actionConfig.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {!reviewAction && (
+                      <p className="mt-3 text-sm text-ink/70">
+                        No human review action available for this state.
+                      </p>
+                    )}
+                  </div>
+
+                  <section className="min-w-0 rounded-xl border border-black/10 bg-white p-4">
+                    <p className="text-xs font-bold uppercase tracking-wide text-ink/60">Post Summary</p>
+                    {selectedSubreddit && (
+                      <p className="mt-2 text-sm font-semibold text-tide">r/{selectedSubreddit}</p>
+                    )}
+                    {selectedTitle && (
+                      <h4 className="mt-2 max-w-3xl whitespace-pre-wrap break-words text-base font-semibold text-ink">
+                        {selectedTitle}
+                      </h4>
+                    )}
+                    {selectedAuthor && (
+                      <p className="mt-2 text-sm text-ink/70">Author: {selectedAuthor}</p>
+                    )}
+                    {(selectedScore || selectedNumComments) && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {selectedScore && (
+                          <span className="rounded-full bg-[#edf5f3] px-3 py-1 text-xs font-semibold text-ink/80">
+                            Upvotes: {selectedScore}
+                          </span>
+                        )}
+                        {selectedNumComments && (
+                          <span className="rounded-full bg-[#fcf1df] px-3 py-1 text-xs font-semibold text-ink/80">
+                            Comments: {selectedNumComments}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {selectedPostedOn && (
+                      <div className="mt-4">
+                        <p className="text-xs font-bold uppercase tracking-wide text-ink/60">
+                          Posted On
+                        </p>
+                        <p className="mt-2 text-sm text-ink/85">{selectedPostedOn}</p>
+                      </div>
+                    )}
+                    {selectedBody && (
+                      <div className="mt-4">
+                        <p className="text-xs font-bold uppercase tracking-wide text-ink/60">
+                          Description
+                        </p>
+                        <p className="mt-2 max-w-3xl whitespace-pre-wrap break-words text-sm leading-6 text-ink/85">
+                          {selectedBody}
+                        </p>
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="min-w-0 rounded-xl border border-black/10 bg-white p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-bold uppercase tracking-wide text-ink/60">
+                        Sampled Comments
+                      </p>
+                      <span className="text-xs text-ink/60">{selectedComments.length} shown</span>
+                    </div>
+                    {selectedComments.length === 0 && (
+                      <p className="mt-3 text-sm text-ink/70">No sampled comments stored for this item.</p>
+                    )}
+                    {selectedComments.length > 0 && (
+                      <div className="mt-3 space-y-3">
+                        {selectedComments.map((comment, index) => {
+                          const commentRecord =
+                            comment && typeof comment === 'object'
+                              ? (comment as Record<string, unknown>)
+                              : {};
+                          const commentAuthor =
+                            typeof commentRecord.author === 'string' ? commentRecord.author : 'unknown';
+                          const commentBody =
+                            typeof commentRecord.body === 'string' ? commentRecord.body : '';
+                          const commentScore =
+                            typeof commentRecord.score === 'number' ||
+                            typeof commentRecord.score === 'string'
+                              ? String(commentRecord.score)
+                              : '';
+
+                          return (
+                            <article
+                              key={`${commentAuthor}-${index}`}
+                              className="min-w-0 rounded-xl border border-black/10 bg-[#fcfbf8] p-3"
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-semibold text-ink">{commentAuthor}</p>
+                                {commentScore && (
+                                  <span className="text-xs font-semibold text-ink/60">
+                                    Upvotes: {commentScore}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="mt-2 max-w-3xl whitespace-pre-wrap break-words text-sm leading-6 text-ink/85">
+                                {commentBody || '(empty comment body)'}
+                              </p>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
+
+                  {reviewActionResult && (
+                    <pre className="max-h-40 max-w-full overflow-auto rounded-xl bg-[#0f1820] p-3 text-xs text-[#d8fff7]">
+                      {JSON.stringify(reviewActionResult, null, 2)}
+                    </pre>
+                  )}
+                </div>
+
+                <pre className="mt-3 max-h-[320px] max-w-full overflow-auto rounded-xl bg-[#0f1820] p-3 text-xs text-[#d8fff7]">
+                  {JSON.stringify(selectedRow, null, 2)}
+                </pre>
+              </>
             )}
           </aside>
         </section>
