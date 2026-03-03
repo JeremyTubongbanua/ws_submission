@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import type { QueueResponse, QueueView } from '@/lib/types';
 import { QUEUE_VIEWS } from '@/lib/types';
@@ -97,6 +98,117 @@ function sortableValue(row: Record<string, unknown>, column: string): string | n
   if (typeof value === 'string') return value.toLowerCase();
   if (typeof value === 'boolean') return value ? 1 : 0;
   return String(value ?? '').toLowerCase();
+}
+
+function renderInlineFormatting(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const pattern = /(\*\*[^*]+\*\*|\[[^\]]+\]\((https?:\/\/[^)\s]+)\)|https?:\/\/\S+\.(?:png|jpe?g|gif|webp))/gi;
+  let lastIndex = 0;
+  let key = 0;
+
+  for (const match of text.matchAll(pattern)) {
+    const matched = match[0];
+    const index = match.index ?? 0;
+    if (index > lastIndex) {
+      nodes.push(text.slice(lastIndex, index));
+    }
+
+    if (matched.startsWith('**') && matched.endsWith('**')) {
+      nodes.push(<strong key={`bold-${key++}`}>{matched.slice(2, -2)}</strong>);
+    } else if (matched.startsWith('[')) {
+      const linkMatch = matched.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/i);
+      if (linkMatch) {
+        nodes.push(
+          <a
+            key={`link-${key++}`}
+            href={linkMatch[2]}
+            target="_blank"
+            rel="noreferrer"
+            className="text-tide underline underline-offset-2"
+          >
+            {linkMatch[1]}
+          </a>,
+        );
+      } else {
+        nodes.push(matched);
+      }
+    } else {
+      nodes.push(
+        <a
+          key={`img-link-${key++}`}
+          href={matched}
+          target="_blank"
+          rel="noreferrer"
+          className="text-tide underline underline-offset-2"
+        >
+          {matched}
+        </a>,
+      );
+    }
+
+    lastIndex = index + matched.length;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+
+  return nodes;
+}
+
+function extractMarkdownImages(text: string): { alt: string; src: string }[] {
+  const images: { alt: string; src: string }[] = [];
+  const markdownPattern = /!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/gi;
+  for (const match of text.matchAll(markdownPattern)) {
+    images.push({ alt: match[1], src: match[2] });
+  }
+  return images;
+}
+
+function renderRichText(text: string): ReactNode {
+  const withoutImages = text.replace(/!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/gi, '').trim();
+  const paragraphs = withoutImages ? withoutImages.split(/\n{2,}/).filter(Boolean) : [];
+  const images = extractMarkdownImages(text);
+
+  return (
+    <div className="space-y-4">
+      {paragraphs.map((paragraph, index) => (
+        <p
+          key={`paragraph-${index}`}
+          className="max-w-3xl whitespace-pre-wrap break-words text-sm leading-6 text-ink/85"
+        >
+          {renderInlineFormatting(paragraph)}
+        </p>
+      ))}
+      {images.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {images.map((image, index) => (
+            <a
+              key={`${image.src}-${index}`}
+              href={image.src}
+              target="_blank"
+              rel="noreferrer"
+              className="overflow-hidden rounded-2xl border border-black/10 bg-[#f7f3e8]"
+            >
+              <img
+                src={image.src}
+                alt={image.alt || 'Attached image'}
+                className="h-56 w-full object-cover"
+                loading="lazy"
+              />
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function isImageUrl(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^https?:\/\/\S+\.(png|jpe?g|gif|webp|avif)(\?.*)?$/i.test(value)
+  );
 }
 
 export default function QueueDashboard() {
@@ -271,6 +383,7 @@ export default function QueueDashboard() {
     : [];
   const selectedPostedOn = formatDateTime(selectedRow?.source_created_at);
   const selectedIndex = sortedItems.findIndex((row) => String(row.id ?? '') === selectedId);
+  const selectedOutboundUrl = selectedRawPayload.outbound_url;
 
   const reviewAction =
     selectedState === 'ingested'
@@ -377,10 +490,10 @@ export default function QueueDashboard() {
     <main className="min-h-screen px-4 py-6 md:px-8 lg:px-12">
       <section className="mx-auto max-w-7xl">
         <header className="mb-6 rounded-2xl border border-black/10 bg-shell p-6 shadow-card">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-tide">Workflow Studio</p>
-          <h1 className="mt-2 text-3xl font-bold md:text-4xl">Triage Dashboard</h1>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-tide">TheCopilotMarketer</p>
+          <h1 className="mt-2 text-3xl font-bold md:text-4xl">Marketing Copilot Dashboard</h1>
           <p className="mt-2 text-sm text-ink/70">
-            Browse pipeline queues, inspect records, and hand off work to automation.
+            Review social opportunities, inspect conversation context, and hand work off to automation.
           </p>
         </header>
 
@@ -671,9 +784,27 @@ export default function QueueDashboard() {
                         <p className="text-xs font-bold uppercase tracking-wide text-ink/60">
                           Description
                         </p>
-                        <p className="mt-2 max-w-3xl whitespace-pre-wrap break-words text-sm leading-6 text-ink/85">
-                          {selectedBody}
+                        <div className="mt-2">{renderRichText(selectedBody)}</div>
+                      </div>
+                    )}
+                    {isImageUrl(selectedOutboundUrl) && (
+                      <div className="mt-4">
+                        <p className="text-xs font-bold uppercase tracking-wide text-ink/60">
+                          Attached Image
                         </p>
+                        <a
+                          href={selectedOutboundUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-2 block max-w-3xl overflow-hidden rounded-2xl border border-black/10 bg-[#f7f3e8]"
+                        >
+                          <img
+                            src={selectedOutboundUrl}
+                            alt="Post attached media"
+                            className="h-auto max-h-[420px] w-full object-contain"
+                            loading="lazy"
+                          />
+                        </a>
                       </div>
                     )}
                   </section>
@@ -718,9 +849,15 @@ export default function QueueDashboard() {
                                   </span>
                                 )}
                               </div>
-                              <p className="mt-2 max-w-3xl whitespace-pre-wrap break-words text-sm leading-6 text-ink/85">
-                                {commentBody || '(empty comment body)'}
-                              </p>
+                              <div className="mt-2">
+                                {commentBody ? (
+                                  renderRichText(commentBody)
+                                ) : (
+                                  <p className="max-w-3xl whitespace-pre-wrap break-words text-sm leading-6 text-ink/85">
+                                    (empty comment body)
+                                  </p>
+                                )}
+                              </div>
                             </article>
                           );
                         })}
